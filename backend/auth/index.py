@@ -11,18 +11,8 @@ def get_conn():
     return psycopg2.connect(os.environ["DATABASE_URL"])
 
 
-def level_for_spent(total_spent: float) -> str:
-    if total_spent >= 100000:
-        return "Платиновый"
-    elif total_spent >= 50000:
-        return "Золотой"
-    elif total_spent >= 15000:
-        return "Серебряный"
-    return "Гость"
-
-
 def handler(event: dict, context) -> dict:
-    """Авторизация гостя по номеру телефона. Вход или регистрация."""
+    """Авторизация и управление профилем гостя по номеру телефона."""
     cors = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
@@ -32,12 +22,13 @@ def handler(event: dict, context) -> dict:
     if event.get("httpMethod") == "OPTIONS":
         return {"statusCode": 200, "headers": cors, "body": ""}
 
-    method = event.get("httpMethod", "GET")
-    path = event.get("path", "/")
+    method = event.get("httpMethod", "POST")
+    body = json.loads(event.get("body") or "{}")
+    action = body.get("action", "")
+    token = (event.get("headers") or {}).get("X-Session-Token", "")
 
-    # POST /login — вход по телефону
-    if method == "POST" and path.endswith("/login"):
-        body = json.loads(event.get("body") or "{}")
+    # ── LOGIN / REGISTER ────────────────────────────────────────────
+    if method == "POST" and action == "login":
         phone = (body.get("phone") or "").strip()
         if not phone:
             return {"statusCode": 400, "headers": cors, "body": json.dumps({"error": "Укажите номер телефона"})}
@@ -45,11 +36,13 @@ def handler(event: dict, context) -> dict:
         conn = get_conn()
         cur = conn.cursor()
 
-        cur.execute(f"SELECT id, phone, name, birth_date, email, notifications, bonuses, total_spent, visits, level, created_at FROM {SCHEMA}.guests WHERE phone = %s", (phone,))
+        cur.execute(
+            f"SELECT id, phone, name, birth_date, email, notifications, bonuses, total_spent, visits, level, created_at FROM {SCHEMA}.guests WHERE phone = %s",
+            (phone,)
+        )
         row = cur.fetchone()
 
         if not row:
-            # Новый гость — регистрируем
             cur.execute(
                 f"INSERT INTO {SCHEMA}.guests (phone, level, bonuses, total_spent, visits, notifications) VALUES (%s, 'Гость', 0, 0, 0, true) RETURNING id, phone, name, birth_date, email, notifications, bonuses, total_spent, visits, level, created_at",
                 (phone,)
@@ -57,86 +50,37 @@ def handler(event: dict, context) -> dict:
             row = cur.fetchone()
 
         guest_id = row[0]
-
-        # Обновляем last_seen
         cur.execute(f"UPDATE {SCHEMA}.guests SET last_seen = NOW() WHERE id = %s", (guest_id,))
 
-        # Создаём сессию
-        token = secrets.token_hex(32)
+        new_token = secrets.token_hex(32)
         expires = datetime.now() + timedelta(days=30)
         cur.execute(
             f"INSERT INTO {SCHEMA}.sessions (guest_id, token, expires_at) VALUES (%s, %s, %s)",
-            (guest_id, token, expires)
+            (guest_id, new_token, expires)
         )
         conn.commit()
         cur.close()
         conn.close()
 
-        guest = {
-            "id": row[0],
-            "phone": row[1],
-            "name": row[2],
-            "birth_date": row[3].isoformat() if row[3] else None,
-            "email": row[4],
-            "notifications": row[5] if row[5] is not None else True,
-            "bonuses": row[6] or 0,
-            "total_spent": float(row[7] or 0),
-            "visits": row[8] or 0,
-            "level": row[9] or "Гость",
-            "member_since": row[10].strftime("%B %Y") if row[10] else "",
-        }
+        return {"statusCode": 200, "headers": cors, "body": json.dumps({"token": new_token, "guest": _row_to_guest(row)}, ensure_ascii=False)}
 
-        return {
-            "statusCode": 200,
-            "headers": cors,
-            "body": json.dumps({"token": token, "guest": guest}, ensure_ascii=False),
-        }
-
-    # GET /me — получить профиль по токену
-    if method == "GET" and path.endswith("/me"):
-        token = event.get("headers", {}).get("X-Session-Token", "")
+    # ── GET ME ──────────────────────────────────────────────────────
+    if method == "GET":
         if not token:
             return {"statusCode": 401, "headers": cors, "body": json.dumps({"error": "Не авторизован"})}
-
         conn = get_conn()
         cur = conn.cursor()
-        cur.execute(
-            f"""SELECT g.id, g.phone, g.name, g.birth_date, g.email, g.notifications,
-                       g.bonuses, g.total_spent, g.visits, g.level, g.created_at
-                FROM {SCHEMA}.sessions s
-                JOIN {SCHEMA}.guests g ON g.id = s.guest_id
-                WHERE s.token = %s AND s.expires_at > NOW()""",
-            (token,)
-        )
-        row = cur.fetchone()
+        row = _guest_by_token(cur, token)
         cur.close()
         conn.close()
-
         if not row:
             return {"statusCode": 401, "headers": cors, "body": json.dumps({"error": "Сессия истекла"})}
+        return {"statusCode": 200, "headers": cors, "body": json.dumps({"guest": _row_to_guest(row)}, ensure_ascii=False)}
 
-        guest = {
-            "id": row[0],
-            "phone": row[1],
-            "name": row[2],
-            "birth_date": row[3].isoformat() if row[3] else None,
-            "email": row[4],
-            "notifications": row[5] if row[5] is not None else True,
-            "bonuses": row[6] or 0,
-            "total_spent": float(row[7] or 0),
-            "visits": row[8] or 0,
-            "level": row[9] or "Гость",
-            "member_since": row[10].strftime("%B %Y") if row[10] else "",
-        }
-        return {"statusCode": 200, "headers": cors, "body": json.dumps({"guest": guest}, ensure_ascii=False)}
-
-    # PUT /profile — обновить профиль
-    if method == "PUT" and path.endswith("/profile"):
-        token = event.get("headers", {}).get("X-Session-Token", "")
+    # ── UPDATE PROFILE ──────────────────────────────────────────────
+    if method == "PUT" and action == "update_profile":
         if not token:
             return {"statusCode": 401, "headers": cors, "body": json.dumps({"error": "Не авторизован"})}
-
-        body = json.loads(event.get("body") or "{}")
         conn = get_conn()
         cur = conn.cursor()
 
@@ -144,52 +88,32 @@ def handler(event: dict, context) -> dict:
             f"SELECT g.id FROM {SCHEMA}.sessions s JOIN {SCHEMA}.guests g ON g.id = s.guest_id WHERE s.token = %s AND s.expires_at > NOW()",
             (token,)
         )
-        row = cur.fetchone()
-        if not row:
+        r = cur.fetchone()
+        if not r:
             cur.close()
             conn.close()
             return {"statusCode": 401, "headers": cors, "body": json.dumps({"error": "Сессия истекла"})}
 
-        guest_id = row[0]
-        name = body.get("name")
-        birth_date = body.get("birth_date")
-        email = body.get("email")
-        notifications = body.get("notifications")
-
+        guest_id = r[0]
         cur.execute(
             f"""UPDATE {SCHEMA}.guests SET
-                name = COALESCE(%s, name),
-                birth_date = COALESCE(%s::date, birth_date),
-                email = COALESCE(%s, email),
+                name          = COALESCE(%s, name),
+                birth_date    = COALESCE(%s::date, birth_date),
+                email         = COALESCE(%s, email),
                 notifications = COALESCE(%s, notifications),
-                updated_at = NOW()
+                updated_at    = NOW()
                 WHERE id = %s
                 RETURNING id, phone, name, birth_date, email, notifications, bonuses, total_spent, visits, level, created_at""",
-            (name, birth_date, email, notifications, guest_id)
+            (body.get("name"), body.get("birth_date"), body.get("email"), body.get("notifications"), guest_id)
         )
         row = cur.fetchone()
         conn.commit()
         cur.close()
         conn.close()
+        return {"statusCode": 200, "headers": cors, "body": json.dumps({"guest": _row_to_guest(row)}, ensure_ascii=False)}
 
-        guest = {
-            "id": row[0],
-            "phone": row[1],
-            "name": row[2],
-            "birth_date": row[3].isoformat() if row[3] else None,
-            "email": row[4],
-            "notifications": row[5] if row[5] is not None else True,
-            "bonuses": row[6] or 0,
-            "total_spent": float(row[7] or 0),
-            "visits": row[8] or 0,
-            "level": row[9] or "Гость",
-            "member_since": row[10].strftime("%B %Y") if row[10] else "",
-        }
-        return {"statusCode": 200, "headers": cors, "body": json.dumps({"guest": guest}, ensure_ascii=False)}
-
-    # POST /logout
-    if method == "POST" and path.endswith("/logout"):
-        token = event.get("headers", {}).get("X-Session-Token", "")
+    # ── LOGOUT ──────────────────────────────────────────────────────
+    if method == "POST" and action == "logout":
         if token:
             conn = get_conn()
             cur = conn.cursor()
@@ -199,4 +123,36 @@ def handler(event: dict, context) -> dict:
             conn.close()
         return {"statusCode": 200, "headers": cors, "body": json.dumps({"ok": True})}
 
-    return {"statusCode": 404, "headers": cors, "body": json.dumps({"error": "Not found"})}
+    return {"statusCode": 400, "headers": cors, "body": json.dumps({"error": "Неизвестный запрос"})}
+
+
+def _guest_by_token(cur, token: str):
+    cur.execute(
+        f"""SELECT g.id, g.phone, g.name, g.birth_date, g.email, g.notifications,
+                   g.bonuses, g.total_spent, g.visits, g.level, g.created_at
+            FROM {SCHEMA}.sessions s
+            JOIN {SCHEMA}.guests g ON g.id = s.guest_id
+            WHERE s.token = %s AND s.expires_at > NOW()""",
+        (token,)
+    )
+    return cur.fetchone()
+
+
+def _row_to_guest(row) -> dict:
+    MONTHS_RU = ["", "января", "февраля", "марта", "апреля", "мая", "июня",
+                 "июля", "августа", "сентября", "октября", "ноября", "декабря"]
+    created = row[10]
+    member_since = f"{MONTHS_RU[created.month]} {created.year}" if created else ""
+    return {
+        "id": row[0],
+        "phone": row[1],
+        "name": row[2],
+        "birth_date": row[3].isoformat() if row[3] else None,
+        "email": row[4],
+        "notifications": row[5] if row[5] is not None else True,
+        "bonuses": row[6] or 0,
+        "total_spent": float(row[7] or 0),
+        "visits": row[8] or 0,
+        "level": row[9] or "Гость",
+        "member_since": member_since,
+    }

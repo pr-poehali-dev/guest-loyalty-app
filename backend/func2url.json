@@ -1,4 +1,6 @@
 {
+  "auth": "https://functions.poehali.dev/971033a9-bdd6-4ca4-ab0f-633f8266c75c",
+  "operations": "https://functions.poehali.dev/fabd8921-1cce-4538-a097-120f5859948f",
   "auth-verify-otp": "https://functions.poehali.dev/33461238-9c1f-4b06-940c-f917834b4285",
   "guest-profile": "https://functions.poehali.dev/379b0ac4-ed59-4de7-8a58-f6d6388fe0a3",
   "auth-send-otp": "https://functions.poehali.dev/d022323a-35ba-4d02-8d46-47bb91864793"

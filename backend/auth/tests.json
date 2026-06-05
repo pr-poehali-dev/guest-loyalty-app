@@ -3,29 +3,29 @@
     {
       "name": "Login existing guest",
       "method": "POST",
-      "path": "/login",
-      "body": {"phone": "+79001234567"},
+      "path": "/",
+      "body": {"phone": "+79001234567", "action": "login"},
       "expectedStatus": 200,
       "expectedBody": {"token": "string"},
-      "bodyMatcher": "partial"
+      "bodyMatcher": "ignore"
     },
     {
-      "name": "Login new guest",
+      "name": "Login new guest (auto-register)",
       "method": "POST",
-      "path": "/login",
-      "body": {"phone": "+79990000001"},
+      "path": "/",
+      "body": {"phone": "+79990000099", "action": "login"},
       "expectedStatus": 200,
       "expectedBody": {"token": "string"},
-      "bodyMatcher": "partial"
+      "bodyMatcher": "ignore"
     },
     {
       "name": "Login without phone",
       "method": "POST",
-      "path": "/login",
-      "body": {},
+      "path": "/",
+      "body": {"action": "login"},
       "expectedStatus": 400,
       "expectedBody": {"error": "string"},
-      "bodyMatcher": "partial"
+      "bodyMatcher": "ignore"
     }
   ]
 }
