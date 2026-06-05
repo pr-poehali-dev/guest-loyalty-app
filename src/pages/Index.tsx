@@ -304,6 +304,17 @@ function HomeSection({ guest, ops, onNavigate }: { guest: Guest; ops: Operation[
         </div>
       </div>
 
+      <a href="https://freedomvilage.ru/#homes" target="_blank" rel="noopener noreferrer"
+        className="flex items-center justify-between bg-white border border-border rounded-2xl px-5 py-4 hover:bg-muted/50 transition-colors animate-fade-in delay-150 group">
+        <div>
+          <div className="font-display text-base font-semibold">Забронировать дом</div>
+          <div className="text-muted-foreground text-xs mt-0.5">freedomvilage.ru</div>
+        </div>
+        <div className="w-10 h-10 rounded-xl wood-texture flex items-center justify-center flex-shrink-0 group-hover:opacity-90 transition-opacity">
+          <Icon name="ExternalLink" size={18} className="text-white" />
+        </div>
+      </a>
+
       <div className="card-warm rounded-2xl p-5 animate-fade-in delay-200">
         <div className="flex items-center justify-between mb-3">
           <div>
