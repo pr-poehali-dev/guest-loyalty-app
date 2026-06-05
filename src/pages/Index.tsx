@@ -119,6 +119,7 @@ export default function Index() {
   );
 
   if (!guest) return <LoginScreen onLogin={handleLogin} />;
+  if (!guest.name) return <NameScreen guest={guest} onSave={handleUpdateProfile} />;
 
   return (
     <div className="min-h-screen bg-background font-body">
@@ -265,6 +266,72 @@ function LoginScreen({ onLogin }: { onLogin: (p: string) => Promise<unknown> }) 
               <div className="text-[10px] text-muted-foreground leading-tight">{item.text}</div>
             </div>
           ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   NAME SCREEN — запрашиваем ФИО при первом входе
+══════════════════════════════════════════════════════════════════ */
+function NameScreen({ guest, onSave }: { guest: Guest; onSave: (f: Partial<Guest>) => Promise<unknown> }) {
+  const [name,    setName]    = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error,   setError]   = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (trimmed.split(" ").filter(Boolean).length < 2) {
+      setError("Введите имя и фамилию"); return;
+    }
+    setLoading(true); setError("");
+    try {
+      await onSave({ name: trimmed });
+    } catch {
+      setError("Ошибка сохранения. Попробуйте ещё раз.");
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-background flex flex-col">
+      <div className="relative h-64 flex-shrink-0">
+        <img src={HOUSE_URL} className="w-full h-full object-cover" alt="" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[hsl(210,15%,22%)]/40 to-background" />
+      </div>
+
+      <div className="flex-1 flex flex-col px-6 -mt-8 relative z-10 pb-8">
+        <div className="flex flex-col items-center mb-8 animate-fade-in">
+          <div className="w-20 h-20 rounded-2xl bg-white shadow-lg flex items-center justify-center p-2 mb-4">
+            <img src={LOGO_URL} className="w-full h-full object-contain" alt="Фридом Виладж" />
+          </div>
+          <div className="font-display text-2xl font-semibold text-center">Добро пожаловать!</div>
+          <div className="text-muted-foreground text-sm mt-1 text-center">Почти готово — осталось представиться</div>
+        </div>
+
+        <div className="card-warm rounded-2xl p-6 animate-fade-in delay-100">
+          <div className="font-display text-xl font-semibold mb-1">Как вас зовут?</div>
+          <div className="text-muted-foreground text-sm mb-5">Введите ваше полное имя, чтобы мы могли обращаться к вам по имени</div>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">Имя и Фамилия</label>
+              <input
+                type="text" value={name} onChange={e => setName(e.target.value)}
+                placeholder="Например: Анна Иванова"
+                className="w-full border border-input rounded-xl px-4 py-3.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-ring font-body"
+                autoComplete="name" autoFocus
+              />
+              {error && <div className="text-rose-500 text-xs mt-1.5">{error}</div>}
+            </div>
+            <button type="submit" disabled={loading || !name.trim()}
+              className="w-full wood-texture text-white rounded-xl py-3.5 font-semibold text-sm transition-opacity hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2">
+              {loading
+                ? <><Icon name="Loader2" size={16} className="animate-spin" /> Сохраняем…</>
+                : "Продолжить →"}
+            </button>
+          </form>
         </div>
       </div>
     </div>
