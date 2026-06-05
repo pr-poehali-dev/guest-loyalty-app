@@ -33,7 +33,7 @@ def check_auth(event: dict) -> bool:
     return given == password
 
 
-CONTACT_KEYS = ["contact_phone", "contact_whatsapp", "contact_email", "contact_address", "contact_hours"]
+CONTACT_KEYS = ["contact_phone", "contact_whatsapp", "contact_email", "contact_address", "contact_hours", "contact_website"]
 
 
 def handler(event: dict, context) -> dict:

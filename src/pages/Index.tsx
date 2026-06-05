@@ -730,6 +730,7 @@ function ContactsSection() {
     contact_email:    "",
     contact_address:  "",
     contact_hours:    "",
+    contact_website:  "",
   });
 
   useEffect(() => {
@@ -750,9 +751,22 @@ function ContactsSection() {
     { icon: "Clock",         label: "Режим работы",         value: contacts.contact_hours,    href: null,                                                                                  action: null },
   ].filter(r => r.value);
 
+  const website = contacts.contact_website || "https://freedomvilage.ru/#homes";
+
   return (
     <div className="pt-5 space-y-5 animate-fade-in">
       <div className="font-display text-2xl font-semibold">Контакты</div>
+
+      {/* Кнопка бронирования */}
+      <a href={website} target="_blank" rel="noopener noreferrer"
+        className="flex items-center justify-between wood-texture text-white rounded-2xl px-5 py-4 hover:opacity-90 transition-opacity">
+        <div>
+          <div className="font-display text-lg font-semibold">Забронировать дом</div>
+          <div className="text-white/70 text-xs mt-0.5">Перейти на сайт бронирования</div>
+        </div>
+        <Icon name="ExternalLink" size={22} className="text-white/80 flex-shrink-0" />
+      </a>
+
       <div className="card-warm rounded-2xl p-5 flex items-center gap-4">
         <img src={LOGO_URL} alt="Фридом Виладж" className="w-16 h-16 object-contain rounded-xl bg-white p-1 border border-border" />
         <div>

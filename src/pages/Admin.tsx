@@ -467,6 +467,7 @@ interface ContactSettings {
   contact_email: string;
   contact_address: string;
   contact_hours: string;
+  contact_website: string;
 }
 
 function ContactsView({ apiFetch }: { apiFetch: (opts: RequestInit, qs?: string) => Promise<unknown> }) {
@@ -476,6 +477,7 @@ function ContactsView({ apiFetch }: { apiFetch: (opts: RequestInit, qs?: string)
     contact_email:    "",
     contact_address:  "",
     contact_hours:    "",
+    contact_website:  "",
   });
   const [loading,  setLoading]  = useState(true);
   const [saving,   setSaving]   = useState(false);
@@ -505,11 +507,12 @@ function ContactsView({ apiFetch }: { apiFetch: (opts: RequestInit, qs?: string)
   };
 
   const fields: { key: keyof ContactSettings; label: string; icon: string; placeholder: string; type?: string }[] = [
-    { key: "contact_phone",    label: "Номер телефона",       icon: "Phone",         placeholder: "+7 (900) 000-00-00", type: "tel" },
-    { key: "contact_whatsapp", label: "WhatsApp / Telegram",  icon: "MessageCircle", placeholder: "+7 (900) 000-00-00", type: "tel" },
-    { key: "contact_email",    label: "Электронная почта",    icon: "Mail",          placeholder: "info@example.ru",    type: "email" },
+    { key: "contact_phone",    label: "Номер телефона",       icon: "Phone",         placeholder: "+7 (900) 000-00-00",           type: "tel" },
+    { key: "contact_whatsapp", label: "WhatsApp / Telegram",  icon: "MessageCircle", placeholder: "+7 (900) 000-00-00",           type: "tel" },
+    { key: "contact_email",    label: "Электронная почта",    icon: "Mail",          placeholder: "info@example.ru",              type: "email" },
     { key: "contact_address",  label: "Адрес",                icon: "MapPin",        placeholder: "г. Москва, ул. Примерная, 1" },
     { key: "contact_hours",    label: "Режим работы",         icon: "Clock",         placeholder: "Ежедневно, 9:00 — 21:00" },
+    { key: "contact_website",  label: "Сайт бронирования",    icon: "Globe",         placeholder: "https://freedomvilage.ru/#homes", type: "url" },
   ];
 
   if (loading) return (
