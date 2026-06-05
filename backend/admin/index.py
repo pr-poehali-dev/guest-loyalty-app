@@ -134,7 +134,7 @@ def handler(event: dict, context) -> dict:
                 "birth_date": r[3].isoformat() if r[3] else None,
                 "email": r[4], "bonuses": r[5] or 0,
                 "total_spent": float(r[6] or 0), "visits": r[7] or 0,
-                "level": r[8] or "Гость",
+                "level": r[8] or "Без уровня",
                 "notifications": r[9] if r[9] is not None else True,
                 "created_at": r[10].strftime("%d.%m.%Y") if r[10] else "",
             })

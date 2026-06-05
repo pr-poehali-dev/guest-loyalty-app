@@ -44,7 +44,7 @@ def handler(event: dict, context) -> dict:
 
         if not row:
             cur.execute(
-                f"INSERT INTO {SCHEMA}.guests (phone, level, bonuses, total_spent, visits, notifications) VALUES (%s, 'Гость', 0, 0, 0, true) RETURNING id, phone, name, birth_date, email, notifications, bonuses, total_spent, visits, level, created_at",
+                f"INSERT INTO {SCHEMA}.guests (phone, level, bonuses, total_spent, visits, notifications) VALUES (%s, 'Без уровня', 0, 0, 0, true) RETURNING id, phone, name, birth_date, email, notifications, bonuses, total_spent, visits, level, created_at",
                 (phone,)
             )
             row = cur.fetchone()
@@ -153,6 +153,6 @@ def _row_to_guest(row) -> dict:
         "bonuses": row[6] or 0,
         "total_spent": float(row[7] or 0),
         "visits": row[8] or 0,
-        "level": row[9] or "Гость",
+        "level": row[9] or "Без уровня",
         "member_since": member_since,
     }

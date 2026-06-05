@@ -11,17 +11,17 @@ const LOGO_URL  = "https://cdn.poehali.dev/projects/1c0a4e35-bc68-4a24-b157-6e54
 const HOUSE_URL = "https://cdn.poehali.dev/projects/1c0a4e35-bc68-4a24-b157-6e54c5e66aa3/bucket/d8034e69-c810-4a69-b63f-17e5edcf7adc.jpg";
 
 const LEVELS_DATA = [
-  { name: "Гость",      icon: "🌿", min: 0,      max: 15000,  percent: 3,  color: "from-stone-400 to-stone-500" },
-  { name: "Серебряный", icon: "🪨", min: 15000,  max: 50000,  percent: 5,  color: "from-slate-400 to-slate-500" },
-  { name: "Золотой",    icon: "🌾", min: 50000,  max: 100000, percent: 7,  color: "from-amber-500 to-yellow-500" },
-  { name: "Платиновый", icon: "🦅", min: 100000, max: null,   percent: 10, color: "from-violet-400 to-purple-500" },
+  { name: "Серебряный", icon: "🪨", min: 15000,  max: 30000,  percent: 3,  color: "from-slate-400 to-slate-500" },
+  { name: "Золотой",    icon: "🌾", min: 30000,  max: 50000,  percent: 5,  color: "from-amber-500 to-yellow-500" },
+  { name: "Платиновый", icon: "🦅", min: 50000,  max: 100000, percent: 7,  color: "from-violet-400 to-purple-500" },
+  { name: "Бриллиант",  icon: "💎", min: 100000, max: null,   percent: 10, color: "from-sky-400 to-cyan-500" },
 ];
 
 const LEVEL_PERKS: Record<string, string[]> = {
-  "Гость":      ["3% бонусов с каждого проживания","День рождения — 500 бонусов"],
-  "Серебряный": ["5% бонусов с каждого проживания","Ранний заезд при наличии","500 бонусов на день рождения"],
-  "Золотой":    ["7% бонусов с каждого проживания","Ранний заезд / поздний выезд","1000 бонусов на день рождения","Приоритетное бронирование"],
-  "Платиновый": ["10% бонусов","Ранний заезд / поздний выезд всегда","2000 бонусов на день рождения","Персональный менеджер","Скидка 5% на всё"],
+  "Серебряный": ["3% бонусов за каждое проживание"],
+  "Золотой":    ["5% бонусов за каждое проживание"],
+  "Платиновый": ["7% бонусов за каждое проживание"],
+  "Бриллиант":  ["10% бонусов за каждое проживание"],
 };
 
 function levelProgress(totalSpent: number) {
@@ -700,18 +700,22 @@ function HistorySection({ ops }: { ops: Operation[] }) {
 ══════════════════════════════════════════════════════════════════ */
 function LevelsSection({ guest }: { guest: Guest }) {
   const { pct, nextName, remaining } = levelProgress(guest.total_spent);
-  const levelIcon = LEVELS_DATA.find(l => l.name === guest.level)?.icon || "🌿";
+  const levelData = LEVELS_DATA.find(l => l.name === guest.level);
+  const hasLevel  = !!levelData;
 
   return (
     <div className="pt-5 space-y-5 animate-fade-in">
       <div className="font-display text-2xl font-semibold">Уровни лояльности</div>
       <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
-        <span className="text-2xl">{levelIcon}</span>
+        <span className="text-2xl">{levelData?.icon || "🌿"}</span>
         <div>
-          <div className="font-semibold text-amber-900 text-sm">Ваш уровень — {guest.level}</div>
-          {nextName
+          {hasLevel
+            ? <div className="font-semibold text-amber-900 text-sm">Ваш уровень — {guest.level}</div>
+            : <div className="font-semibold text-amber-900 text-sm">Уровень ещё не присвоен</div>}
+          {hasLevel && (nextName
             ? <div className="text-xs text-amber-700 mt-0.5">До «{nextName}» осталось {remaining.toLocaleString()} ₽ трат ({pct}% выполнено)</div>
-            : <div className="text-xs text-amber-700 mt-0.5">Максимальный уровень достигнут!</div>}
+            : <div className="text-xs text-amber-700 mt-0.5">Максимальный уровень достигнут!</div>)}
+          {!hasLevel && <div className="text-xs text-amber-700 mt-0.5">Накопите от 15 000 ₽ трат, чтобы получить первый уровень</div>}
         </div>
       </div>
       <div className="space-y-4">
