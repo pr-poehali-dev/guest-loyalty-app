@@ -1,0 +1,30 @@
+{
+  "tests": [
+    {
+      "name": "Send OTP success",
+      "method": "POST",
+      "path": "/",
+      "body": {"phone": "+79001234567"},
+      "expectedStatus": 200,
+      "expectedBody": {"ok": true},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Send OTP invalid phone",
+      "method": "POST",
+      "path": "/",
+      "body": {"phone": "123"},
+      "expectedStatus": 400,
+      "expectedBody": {},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "OPTIONS preflight",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200,
+      "bodyMatcher": "partial",
+      "expectedBody": {}
+    }
+  ]
+}

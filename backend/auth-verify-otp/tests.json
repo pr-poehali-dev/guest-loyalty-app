@@ -1,0 +1,30 @@
+{
+  "tests": [
+    {
+      "name": "Verify wrong code",
+      "method": "POST",
+      "path": "/",
+      "body": {"phone": "+79001234567", "code": "0000"},
+      "expectedStatus": 401,
+      "expectedBody": {},
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Missing params",
+      "method": "POST",
+      "path": "/",
+      "body": {},
+      "expectedStatus": 400,
+      "bodyMatcher": "partial",
+      "expectedBody": {}
+    },
+    {
+      "name": "OPTIONS preflight",
+      "method": "OPTIONS",
+      "path": "/",
+      "expectedStatus": 200,
+      "bodyMatcher": "partial",
+      "expectedBody": {}
+    }
+  ]
+}
