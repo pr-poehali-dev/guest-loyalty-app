@@ -1,16 +1,16 @@
 {
   "tests": [
     {
-      "name": "No password returns 401",
-      "method": "GET",
+      "name": "OPTIONS preflight",
+      "method": "OPTIONS",
       "path": "/",
-      "expectedStatus": 401,
+      "expectedStatus": 200,
       "expectedBody": {},
       "bodyMatcher": "ignore"
     },
     {
-      "name": "OPTIONS preflight",
-      "method": "OPTIONS",
+      "name": "GET without password returns guests (no ADMIN_PASSWORD set)",
+      "method": "GET",
       "path": "/",
       "expectedStatus": 200,
       "expectedBody": {},

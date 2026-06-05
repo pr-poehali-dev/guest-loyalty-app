@@ -33,11 +33,24 @@ def check_auth(event: dict) -> bool:
     return given == password
 
 
+CONTACT_KEYS = ["contact_phone", "contact_whatsapp", "contact_email", "contact_address", "contact_hours"]
+
+
 def handler(event: dict, context) -> dict:
-    """Панель администратора: управление гостями и бонусами."""
+    """Панель администратора: управление гостями, бонусами и контактами."""
 
     if event.get("httpMethod") == "OPTIONS":
         return {"statusCode": 200, "headers": cors(), "body": ""}
+
+    # Публичный запрос контактов — без пароля
+    if event.get("httpMethod") == "GET":
+        qs_pre = event.get("queryStringParameters") or {}
+        if qs_pre.get("type") == "public_settings":
+            conn_p = get_conn(); cur_p = conn_p.cursor()
+            cur_p.execute(f"SELECT key, value FROM {SCHEMA}.settings WHERE key = ANY(%s)", (CONTACT_KEYS,))
+            settings = {r[0]: r[1] for r in cur_p.fetchall()}
+            cur_p.close(); conn_p.close()
+            return ok({"settings": settings})
 
     if not check_auth(event):
         return err("Неверный пароль администратора", 401)
@@ -49,10 +62,17 @@ def handler(event: dict, context) -> dict:
     conn = get_conn()
     cur = conn.cursor()
 
-    # ── GET: список гостей ──────────────────────────────────────────
+    # ── GET: список гостей + настройки контактов ───────────────────
     if method == "GET":
         qs = event.get("queryStringParameters") or {}
         search = (qs.get("search") or "").strip()
+
+        # Запрос настроек для админа
+        if qs.get("type") == "settings":
+            cur.execute(f"SELECT key, value FROM {SCHEMA}.settings WHERE key = ANY(%s)", (CONTACT_KEYS,))
+            settings = {r[0]: r[1] for r in cur.fetchall()}
+            cur.close(); conn.close()
+            return ok({"settings": settings})
 
         if search:
             cur.execute(
@@ -175,6 +195,19 @@ def handler(event: dict, context) -> dict:
             if not row:
                 return err("Гость не найден", 404)
             return ok({"ok": True, "guest_id": row[0], "bonuses": row[1], "total_spent": float(row[2] or 0), "visits": row[3], "level": row[4]})
+
+        # Сохранить настройки контактов
+        if action == "save_settings":
+            settings = body.get("settings") or {}
+            for key in CONTACT_KEYS:
+                if key in settings:
+                    cur.execute(
+                        f"INSERT INTO {SCHEMA}.settings (key, value, updated_at) VALUES (%s, %s, NOW()) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()",
+                        (key, settings[key])
+                    )
+            conn.commit()
+            cur.close(); conn.close()
+            return ok({"ok": True})
 
         cur.close(); conn.close()
         return err("Неизвестное действие")

@@ -26,6 +26,7 @@ export default function Admin() {
   const [search,   setSearch]     = useState("");
   const [selected, setSelected]   = useState<Guest | null>(null);
   const [view,     setView]       = useState<"list" | "detail">("list");
+  const [tab,      setTab]        = useState<"guests" | "contacts">("guests");
 
   const apiFetch = useCallback(async (opts: RequestInit = {}, qs = "") => {
     const hdrs: Record<string, string> = { "Content-Type": "application/json", "X-Admin-Password": password };
@@ -88,10 +89,20 @@ export default function Admin() {
             </button>
           </div>
         </div>
+
+        {/* Tabs */}
+        <div className="max-w-5xl mx-auto px-4 pb-0 flex gap-1 mt-1">
+          {([["guests", "Users", "Гости"], ["contacts", "Phone", "Контакты"]] as const).map(([key, icon, label]) => (
+            <button key={key} onClick={() => { setTab(key); setView("list"); setSelected(null); }}
+              className={`flex items-center gap-1.5 px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${tab === key ? "bg-[#f4f1ec] text-foreground" : "text-white/60 hover:text-white/90"}`}>
+              <Icon name={icon} size={15} />{label}
+            </button>
+          ))}
+        </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-6">
-        {view === "list" && (
+        {tab === "guests" && view === "list" && (
           <ListView
             guests={guests} stats={stats} search={search}
             loading={loading}
@@ -100,13 +111,16 @@ export default function Admin() {
             onRefresh={() => loadGuests(search)}
           />
         )}
-        {view === "detail" && selected && (
+        {tab === "guests" && view === "detail" && selected && (
           <DetailView
             guest={selected}
             apiFetch={apiFetch}
             onBack={() => { setView("list"); setSelected(null); loadGuests(search); }}
             onGuestUpdated={(updated) => setSelected(updated)}
           />
+        )}
+        {tab === "contacts" && (
+          <ContactsView apiFetch={apiFetch} />
         )}
       </main>
     </div>
@@ -440,6 +454,125 @@ function DetailView({ guest, apiFetch, onBack, onGuestUpdated }: {
       <button onClick={onBack} className="w-full flex items-center justify-center gap-2 py-3 text-sm text-muted-foreground border border-border rounded-xl hover:bg-muted transition-colors">
         <Icon name="ArrowLeft" size={16} /> Вернуться к списку
       </button>
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   CONTACTS VIEW
+══════════════════════════════════════════════════════════════════ */
+interface ContactSettings {
+  contact_phone: string;
+  contact_whatsapp: string;
+  contact_email: string;
+  contact_address: string;
+  contact_hours: string;
+}
+
+function ContactsView({ apiFetch }: { apiFetch: (opts: RequestInit, qs?: string) => Promise<unknown> }) {
+  const [form, setForm] = useState<ContactSettings>({
+    contact_phone:    "",
+    contact_whatsapp: "",
+    contact_email:    "",
+    contact_address:  "",
+    contact_hours:    "",
+  });
+  const [loading,  setLoading]  = useState(true);
+  const [saving,   setSaving]   = useState(false);
+  const [msg,      setMsg]      = useState("");
+
+  useEffect(() => {
+    apiFetch({ method: "GET" }, "type=settings")
+      .then((data: unknown) => {
+        const d = data as { settings?: Partial<ContactSettings> };
+        if (d.settings) setForm(f => ({ ...f, ...d.settings }));
+      })
+      .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true); setMsg("");
+    try {
+      const data = await apiFetch({
+        method: "POST",
+        body: JSON.stringify({ action: "save_settings", settings: form }),
+      }) as { ok?: boolean; error?: string };
+      setMsg(data.ok ? "✓ Контакты сохранены" : "✗ " + (data.error || "Ошибка"));
+    } catch { setMsg("✗ Ошибка соединения"); }
+    finally { setSaving(false); setTimeout(() => setMsg(""), 3000); }
+  };
+
+  const fields: { key: keyof ContactSettings; label: string; icon: string; placeholder: string; type?: string }[] = [
+    { key: "contact_phone",    label: "Номер телефона",       icon: "Phone",         placeholder: "+7 (900) 000-00-00", type: "tel" },
+    { key: "contact_whatsapp", label: "WhatsApp / Telegram",  icon: "MessageCircle", placeholder: "+7 (900) 000-00-00", type: "tel" },
+    { key: "contact_email",    label: "Электронная почта",    icon: "Mail",          placeholder: "info@example.ru",    type: "email" },
+    { key: "contact_address",  label: "Адрес",                icon: "MapPin",        placeholder: "г. Москва, ул. Примерная, 1" },
+    { key: "contact_hours",    label: "Режим работы",         icon: "Clock",         placeholder: "Ежедневно, 9:00 — 21:00" },
+  ];
+
+  if (loading) return (
+    <div className="flex items-center justify-center py-20 text-muted-foreground text-sm">
+      <Icon name="Loader2" size={20} className="animate-spin mr-2" /> Загрузка…
+    </div>
+  );
+
+  return (
+    <div className="max-w-2xl space-y-5">
+      <div>
+        <div className="font-display text-2xl font-semibold">Контакты</div>
+        <div className="text-muted-foreground text-sm mt-1">Данные отображаются в разделе «Контакты» приложения для гостей</div>
+      </div>
+
+      <form onSubmit={handleSave} className="bg-white rounded-2xl shadow-sm p-6 space-y-5">
+        {fields.map(f => (
+          <div key={f.key}>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground uppercase tracking-wide mb-1.5">
+              <Icon name={f.icon} size={13} />
+              {f.label}
+            </label>
+            <input
+              type={f.type || "text"}
+              value={form[f.key]}
+              onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
+              placeholder={f.placeholder}
+              className="w-full border border-input rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+        ))}
+
+        {msg && (
+          <div className={`text-sm text-center py-2.5 rounded-xl ${msg.startsWith("✓") ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+            {msg}
+          </div>
+        )}
+
+        <button type="submit" disabled={saving}
+          className="w-full py-3.5 rounded-xl font-semibold text-sm text-white transition-opacity hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2"
+          style={{ background: "hsl(32,45%,55%)" }}>
+          {saving ? <><Icon name="Loader2" size={16} className="animate-spin" /> Сохраняю…</> : "Сохранить контакты"}
+        </button>
+      </form>
+
+      {/* Preview */}
+      <div className="bg-white rounded-2xl shadow-sm p-5">
+        <div className="font-display text-base font-semibold mb-4 text-muted-foreground">Предпросмотр</div>
+        <div className="space-y-3">
+          {fields.map(f => (
+            <div key={f.key} className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
+                style={{ background: "hsl(32,45%,55%)" }}>
+                <Icon name={f.icon} size={15} className="text-white" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-xs text-muted-foreground">{f.label}</div>
+                <div className="text-sm font-medium truncate">{form[f.key] || <span className="text-muted-foreground italic">Не заполнено</span>}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

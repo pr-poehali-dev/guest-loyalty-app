@@ -3,8 +3,9 @@ import Icon from "@/components/ui/icon";
 
 type Section = "home" | "profile" | "earn" | "spend" | "history" | "levels" | "about" | "contacts";
 
-const AUTH_URL = "https://functions.poehali.dev/971033a9-bdd6-4ca4-ab0f-633f8266c75c";
-const OPS_URL  = "https://functions.poehali.dev/fabd8921-1cce-4538-a097-120f5859948f";
+const AUTH_URL  = "https://functions.poehali.dev/971033a9-bdd6-4ca4-ab0f-633f8266c75c";
+const OPS_URL   = "https://functions.poehali.dev/fabd8921-1cce-4538-a097-120f5859948f";
+const ADMIN_URL = "https://functions.poehali.dev/ed5b87b9-be69-467e-8657-3ee303c934a8";
 
 const LOGO_URL  = "https://cdn.poehali.dev/projects/1c0a4e35-bc68-4a24-b157-6e54c5e66aa3/bucket/eca21a63-97af-4be7-b4c5-0dbea45a48ae.jpg";
 const HOUSE_URL = "https://cdn.poehali.dev/projects/1c0a4e35-bc68-4a24-b157-6e54c5e66aa3/bucket/d8034e69-c810-4a69-b63f-17e5edcf7adc.jpg";
@@ -723,6 +724,32 @@ function AboutSection() {
    CONTACTS
 ══════════════════════════════════════════════════════════════════ */
 function ContactsSection() {
+  const [contacts, setContacts] = useState({
+    contact_phone:    "",
+    contact_whatsapp: "",
+    contact_email:    "",
+    contact_address:  "",
+    contact_hours:    "",
+  });
+
+  useEffect(() => {
+    fetch(`${ADMIN_URL}?type=public_settings`)
+      .then(r => r.json())
+      .then(raw => {
+        const data = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (data.settings) setContacts(s => ({ ...s, ...data.settings }));
+      })
+      .catch(() => {});
+  }, []);
+
+  const rows = [
+    { icon: "Phone",         label: "Телефон",             value: contacts.contact_phone,    href: contacts.contact_phone    ? `tel:${contacts.contact_phone.replace(/\D/g,"")}` : null, action: "Позвонить" },
+    { icon: "MessageCircle", label: "WhatsApp / Telegram",  value: contacts.contact_whatsapp, href: null,                                                                                  action: "Написать" },
+    { icon: "Mail",          label: "Электронная почта",    value: contacts.contact_email,    href: contacts.contact_email    ? `mailto:${contacts.contact_email}` : null,                action: "Написать" },
+    { icon: "MapPin",        label: "Адрес",                value: contacts.contact_address,  href: null,                                                                                  action: "На карте" },
+    { icon: "Clock",         label: "Режим работы",         value: contacts.contact_hours,    href: null,                                                                                  action: null },
+  ].filter(r => r.value);
+
   return (
     <div className="pt-5 space-y-5 animate-fade-in">
       <div className="font-display text-2xl font-semibold">Контакты</div>
@@ -733,26 +760,29 @@ function ContactsSection() {
           <div className="text-muted-foreground text-sm">Сеть арендных домов</div>
         </div>
       </div>
-      <div className="space-y-3">
-        {[
-          { icon:"Phone",         label:"Телефон",              value:"+7 (900) 000-00-00",              action:"Позвонить" },
-          { icon:"MessageCircle", label:"WhatsApp / Telegram",  value:"+7 (900) 000-00-00",              action:"Написать" },
-          { icon:"Mail",          label:"Email",                value:"info@freedom-village.ru",          action:"Написать" },
-          { icon:"MapPin",        label:"Адрес",                value:"Московская область, пос. Лесной", action:"На карте" },
-          { icon:"Clock",         label:"Режим работы",         value:"Ежедневно, 9:00 — 21:00",         action:null },
-        ].map(c => (
-          <div key={c.label} className="card-warm rounded-xl px-4 py-3.5 flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl wood-texture flex items-center justify-center flex-shrink-0">
-              <Icon name={c.icon} size={16} className="text-white" />
+      {rows.length > 0 ? (
+        <div className="space-y-3">
+          {rows.map(c => (
+            <div key={c.label} className="card-warm rounded-xl px-4 py-3.5 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl wood-texture flex items-center justify-center flex-shrink-0">
+                <Icon name={c.icon} size={16} className="text-white" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs text-muted-foreground">{c.label}</div>
+                <div className="text-sm font-medium mt-0.5 truncate">{c.value}</div>
+              </div>
+              {c.action && c.href && (
+                <a href={c.href} className="text-accent text-xs font-semibold whitespace-nowrap">{c.action} →</a>
+              )}
+              {c.action && !c.href && (
+                <span className="text-accent text-xs font-semibold whitespace-nowrap">{c.action} →</span>
+              )}
             </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-xs text-muted-foreground">{c.label}</div>
-              <div className="text-sm font-medium mt-0.5 truncate">{c.value}</div>
-            </div>
-            {c.action && <button className="text-accent text-xs font-semibold whitespace-nowrap">{c.action} →</button>}
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <div className="card-warm rounded-2xl p-8 text-center text-muted-foreground text-sm">Контакты не заполнены</div>
+      )}
       <div className="card-warm rounded-2xl p-5">
         <div className="font-display text-lg font-semibold mb-3">Написать нам</div>
         <div className="space-y-3">
