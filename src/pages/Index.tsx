@@ -808,14 +808,69 @@ function ContactsSection() {
       ) : (
         <div className="card-warm rounded-2xl p-8 text-center text-muted-foreground text-sm">Контакты не заполнены</div>
       )}
-      <div className="card-warm rounded-2xl p-5">
-        <div className="font-display text-lg font-semibold mb-3">Написать нам</div>
-        <div className="space-y-3">
-          <input type="text" placeholder="Ваше имя" className="w-full border border-input rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ring" />
-          <textarea placeholder="Ваше сообщение" rows={3} className="w-full border border-input rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ring resize-none" />
-          <button className="w-full wood-texture text-white rounded-xl py-3.5 font-semibold text-sm transition-opacity hover:opacity-90">Отправить сообщение</button>
+      <ContactForm />
+    </div>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   CONTACT FORM
+══════════════════════════════════════════════════════════════════ */
+function ContactForm() {
+  const [name,    setName]    = useState("");
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const [status,  setStatus]  = useState<"idle"|"ok"|"err">("idle");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!message.trim()) return;
+    setSending(true); setStatus("idle");
+    try {
+      const res = await fetch(ADMIN_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "contact_message", name: name.trim(), message: message.trim() }),
+      });
+      const raw  = await res.json();
+      const data = typeof raw === "string" ? JSON.parse(raw) : raw;
+      if (data.ok) { setStatus("ok"); setName(""); setMessage(""); }
+      else setStatus("err");
+    } catch { setStatus("err"); }
+    finally { setSending(false); }
+  };
+
+  return (
+    <div className="card-warm rounded-2xl p-5">
+      <div className="font-display text-lg font-semibold mb-3">Написать нам</div>
+      {status === "ok" ? (
+        <div className="py-6 text-center space-y-2 animate-fade-in">
+          <div className="text-3xl">✉️</div>
+          <div className="font-medium text-sm">Сообщение отправлено!</div>
+          <div className="text-xs text-muted-foreground">Мы ответим вам в ближайшее время</div>
+          <button onClick={() => setStatus("idle")} className="text-accent text-xs font-medium mt-2">Отправить ещё</button>
         </div>
-      </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <input
+            type="text" value={name} onChange={e => setName(e.target.value)}
+            placeholder="Ваше имя"
+            className="w-full border border-input rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          <textarea
+            value={message} onChange={e => setMessage(e.target.value)}
+            placeholder="Ваше сообщение" rows={3} required
+            className="w-full border border-input rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+          />
+          {status === "err" && (
+            <div className="text-rose-500 text-xs text-center">Ошибка отправки, попробуйте ещё раз</div>
+          )}
+          <button type="submit" disabled={sending || !message.trim()}
+            className="w-full wood-texture text-white rounded-xl py-3.5 font-semibold text-sm transition-opacity hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2">
+            {sending ? <><Icon name="Loader2" size={16} className="animate-spin" /> Отправляю…</> : "Отправить сообщение"}
+          </button>
+        </form>
+      )}
     </div>
   );
 }

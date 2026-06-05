@@ -1,8 +1,11 @@
 import json
 import os
 import psycopg2
+import urllib.request
+import urllib.parse
 
 SCHEMA = "t_p70437429_guest_loyalty_app"
+TELEGRAM_CHAT_ID = "6893050478"
 
 
 def get_conn():
@@ -41,6 +44,37 @@ def handler(event: dict, context) -> dict:
 
     if event.get("httpMethod") == "OPTIONS":
         return {"statusCode": 200, "headers": cors(), "body": ""}
+
+    # Публичное сообщение от гостя — без пароля
+    if event.get("httpMethod") == "POST":
+        _body = json.loads(event.get("body") or "{}")
+        if _body.get("action") == "contact_message":
+            guest_name = (_body.get("name") or "Аноним").strip()
+            guest_msg  = (_body.get("message") or "").strip()
+            guest_phone = (_body.get("phone") or "").strip()
+            if not guest_msg:
+                return err("Напишите сообщение")
+            token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+            if token:
+                text = (
+                    f"📩 <b>Новое сообщение от гостя</b>\n\n"
+                    f"👤 Имя: {guest_name}\n"
+                    + (f"📱 Телефон: {guest_phone}\n" if guest_phone else "")
+                    + f"\n💬 {guest_msg}"
+                )
+                params = urllib.parse.urlencode({
+                    "chat_id": TELEGRAM_CHAT_ID,
+                    "text": text,
+                    "parse_mode": "HTML",
+                })
+                req = urllib.request.Request(
+                    f"https://api.telegram.org/bot{token}/sendMessage?{params}"
+                )
+                try:
+                    urllib.request.urlopen(req, timeout=10)
+                except Exception as e:
+                    return err(f"Ошибка отправки: {e}")
+            return ok({"ok": True})
 
     # Публичный запрос контактов — без пароля
     if event.get("httpMethod") == "GET":
@@ -195,6 +229,9 @@ def handler(event: dict, context) -> dict:
             if not row:
                 return err("Гость не найден", 404)
             return ok({"ok": True, "guest_id": row[0], "bonuses": row[1], "total_spent": float(row[2] or 0), "visits": row[3], "level": row[4]})
+
+        # Сообщение от гостя — без авторизации (публичный action)
+        # обрабатывается ниже отдельно, сюда не попадёт
 
         # Сохранить настройки контактов
         if action == "save_settings":
