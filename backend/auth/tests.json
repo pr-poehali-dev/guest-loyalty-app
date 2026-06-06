@@ -7,7 +7,7 @@
       "body": {"phone": "+79001234567", "action": "login"},
       "expectedStatus": 200,
       "expectedBody": {"token": "string"},
-      "bodyMatcher": "ignore"
+      "bodyMatcher": "partial"
     },
     {
       "name": "Login new guest (auto-register)",
@@ -16,7 +16,7 @@
       "body": {"phone": "+79990000099", "action": "login"},
       "expectedStatus": 200,
       "expectedBody": {"token": "string"},
-      "bodyMatcher": "ignore"
+      "bodyMatcher": "partial"
     },
     {
       "name": "Login without phone",
@@ -25,7 +25,7 @@
       "body": {"action": "login"},
       "expectedStatus": 400,
       "expectedBody": {"error": "string"},
-      "bodyMatcher": "ignore"
+      "bodyMatcher": "partial"
     }
   ]
 }

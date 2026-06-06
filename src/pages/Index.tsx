@@ -91,6 +91,19 @@ export default function Index() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guest?.id]);
 
+  // Автопроверка дня рождения при входе
+  useEffect(() => {
+    if (!guest?.birth_date || !token) return;
+    const bd = new Date(guest.birth_date);
+    const today = new Date();
+    if (bd.getMonth() === today.getMonth() && bd.getDate() === today.getDate()) {
+      apiFetch(AUTH_URL, { method: "POST", body: JSON.stringify({ action: "birthday_bonus" }) })
+        .then(d => { if (d.guest) { setGuest(d.guest); setOps(prev => [{ id: Date.now(), type: "earn", amount: d.bonus_given, description: "Бонусы на день рождения", date: new Date().toLocaleDateString("ru-RU") }, ...prev]); } })
+        .catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [guest?.id]);
+
   const handleLogin = async (phone: string) => {
     const d = await apiFetch(AUTH_URL, { method: "POST", body: JSON.stringify({ action: "login", phone }) });
     if (d.token) { localStorage.setItem("fv_token", d.token); setToken(d.token); setGuest(d.guest); }
@@ -276,9 +289,11 @@ function LoginScreen({ onLogin }: { onLogin: (p: string) => Promise<unknown> }) 
    NAME SCREEN — запрашиваем ФИО при первом входе
 ══════════════════════════════════════════════════════════════════ */
 function NameScreen({ guest, onSave }: { guest: Guest; onSave: (f: Partial<Guest>) => Promise<unknown> }) {
-  const [name,    setName]    = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState("");
+  const [name,      setName]      = useState("");
+  const [email,     setEmail]     = useState("");
+  const [birthDate, setBirthDate] = useState("");
+  const [loading,   setLoading]   = useState(false);
+  const [error,     setError]     = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -288,7 +303,7 @@ function NameScreen({ guest, onSave }: { guest: Guest; onSave: (f: Partial<Guest
     }
     setLoading(true); setError("");
     try {
-      await onSave({ name: trimmed });
+      await onSave({ name: trimmed, email: email.trim() || undefined, birth_date: birthDate || undefined });
     } catch {
       setError("Ошибка сохранения. Попробуйте ещё раз.");
       setLoading(false);
@@ -297,39 +312,62 @@ function NameScreen({ guest, onSave }: { guest: Guest; onSave: (f: Partial<Guest
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <div className="relative h-64 flex-shrink-0">
+      <div className="relative h-48 flex-shrink-0">
         <img src={HOUSE_URL} className="w-full h-full object-cover" alt="" />
         <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[hsl(210,15%,22%)]/40 to-background" />
       </div>
 
       <div className="flex-1 flex flex-col px-6 -mt-8 relative z-10 pb-8">
-        <div className="flex flex-col items-center mb-8 animate-fade-in">
+        <div className="flex flex-col items-center mb-6 animate-fade-in">
           <div className="w-20 h-20 rounded-2xl bg-white shadow-lg flex items-center justify-center p-2 mb-4">
             <img src={LOGO_URL} className="w-full h-full object-contain" alt="Фридом Виладж" />
           </div>
           <div className="font-display text-2xl font-semibold text-center">Добро пожаловать!</div>
-          <div className="text-muted-foreground text-sm mt-1 text-center">Почти готово — осталось представиться</div>
+          <div className="text-muted-foreground text-sm mt-1 text-center">Заполните данные для участия в программе</div>
         </div>
 
         <div className="card-warm rounded-2xl p-6 animate-fade-in delay-100">
-          <div className="font-display text-xl font-semibold mb-1">Как вас зовут?</div>
-          <div className="text-muted-foreground text-sm mb-5">Введите ваше полное имя, чтобы мы могли обращаться к вам по имени</div>
+          <div className="font-display text-xl font-semibold mb-1">Расскажите о себе</div>
+          <div className="text-muted-foreground text-sm mb-5">Укажите имя и, по желанию, дату рождения для получения бонусов</div>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">Имя и Фамилия</label>
+              <label className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">Имя и Фамилия *</label>
               <input
                 type="text" value={name} onChange={e => setName(e.target.value)}
                 placeholder="Например: Анна Иванова"
                 className="w-full border border-input rounded-xl px-4 py-3.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-ring font-body"
                 autoComplete="name" autoFocus
               />
-              {error && <div className="text-rose-500 text-xs mt-1.5">{error}</div>}
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">Электронная почта</label>
+              <input
+                type="email" value={email} onChange={e => setEmail(e.target.value)}
+                placeholder="example@mail.ru"
+                className="w-full border border-input rounded-xl px-4 py-3.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-ring font-body"
+                autoComplete="email"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground uppercase tracking-wide block mb-1.5">
+                Дата рождения <span className="text-emerald-600 font-semibold">+3000 бонусов</span>
+              </label>
+              <input
+                type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)}
+                max={new Date().toISOString().split("T")[0]}
+                className="w-full border border-input rounded-xl px-4 py-3.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-ring font-body"
+              />
+              <div className="text-xs text-muted-foreground mt-1">Получите 3000 бонусов в день рождения каждый год</div>
+            </div>
+            {error && <div className="text-rose-500 text-xs">{error}</div>}
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-xs text-emerald-800">
+              🎁 За регистрацию вы получите <span className="font-semibold">1000 приветственных бонусов</span>
             </div>
             <button type="submit" disabled={loading || !name.trim()}
               className="w-full wood-texture text-white rounded-xl py-3.5 font-semibold text-sm transition-opacity hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2">
               {loading
                 ? <><Icon name="Loader2" size={16} className="animate-spin" /> Сохраняем…</>
-                : "Продолжить →"}
+                : "Зарегистрироваться и получить бонусы →"}
             </button>
           </form>
         </div>

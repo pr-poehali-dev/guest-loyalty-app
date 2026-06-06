@@ -2,9 +2,12 @@ import json
 import os
 import secrets
 import psycopg2
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 
 SCHEMA = "t_p70437429_guest_loyalty_app"
+
+BONUS_REGISTRATION = 1000
+BONUS_BIRTHDAY     = 3000
 
 
 def get_conn():
@@ -12,7 +15,10 @@ def get_conn():
 
 
 def handler(event: dict, context) -> dict:
-    """Авторизация и управление профилем гостя по номеру телефона."""
+    """Авторизация и управление профилем гостя по номеру телефона.
+    При первой регистрации начисляется 1000 бонусов.
+    При входе в день рождения начисляется 3000 бонусов (раз в год).
+    """
     cors = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Methods": "GET, POST, PUT, OPTIONS",
@@ -41,8 +47,9 @@ def handler(event: dict, context) -> dict:
             (phone,)
         )
         row = cur.fetchone()
+        is_new = row is None
 
-        if not row:
+        if is_new:
             cur.execute(
                 f"INSERT INTO {SCHEMA}.guests (phone, level, bonuses, total_spent, visits, notifications) VALUES (%s, 'Без уровня', 0, 0, 0, true) RETURNING id, phone, name, birth_date, email, notifications, bonuses, total_spent, visits, level, created_at",
                 (phone,)
@@ -62,7 +69,7 @@ def handler(event: dict, context) -> dict:
         cur.close()
         conn.close()
 
-        return {"statusCode": 200, "headers": cors, "body": json.dumps({"token": new_token, "guest": _row_to_guest(row)}, ensure_ascii=False)}
+        return {"statusCode": 200, "headers": cors, "body": json.dumps({"token": new_token, "guest": _row_to_guest(row), "is_new": is_new}, ensure_ascii=False)}
 
     # ── GET ME ──────────────────────────────────────────────────────
     if method == "GET":
@@ -85,7 +92,7 @@ def handler(event: dict, context) -> dict:
         cur = conn.cursor()
 
         cur.execute(
-            f"SELECT g.id FROM {SCHEMA}.sessions s JOIN {SCHEMA}.guests g ON g.id = s.guest_id WHERE s.token = %s AND s.expires_at > NOW()",
+            f"SELECT g.id, g.name, g.bonuses FROM {SCHEMA}.sessions s JOIN {SCHEMA}.guests g ON g.id = s.guest_id WHERE s.token = %s AND s.expires_at > NOW()",
             (token,)
         )
         r = cur.fetchone()
@@ -94,7 +101,14 @@ def handler(event: dict, context) -> dict:
             conn.close()
             return {"statusCode": 401, "headers": cors, "body": json.dumps({"error": "Сессия истекла"})}
 
-        guest_id = r[0]
+        guest_id    = r[0]
+        was_unnamed = not r[1]
+
+        new_name       = body.get("name")
+        new_birth_date = body.get("birth_date")
+        new_email      = body.get("email")
+        new_notif      = body.get("notifications")
+
         cur.execute(
             f"""UPDATE {SCHEMA}.guests SET
                 name          = COALESCE(%s, name),
@@ -104,13 +118,97 @@ def handler(event: dict, context) -> dict:
                 updated_at    = NOW()
                 WHERE id = %s
                 RETURNING id, phone, name, birth_date, email, notifications, bonuses, total_spent, visits, level, created_at""",
-            (body.get("name"), body.get("birth_date"), body.get("email"), body.get("notifications"), guest_id)
+            (new_name, new_birth_date, new_email, new_notif, guest_id)
         )
         row = cur.fetchone()
+
+        # Начисляем 1000 бонусов за регистрацию (первое заполнение имени)
+        if was_unnamed and new_name:
+            cur.execute(
+                f"UPDATE {SCHEMA}.guests SET bonuses = bonuses + %s WHERE id = %s",
+                (BONUS_REGISTRATION, guest_id)
+            )
+            cur.execute(
+                f"INSERT INTO {SCHEMA}.bonus_transactions (guest_id, type, amount, description) VALUES (%s, 'earn', %s, %s)",
+                (guest_id, BONUS_REGISTRATION, "Приветственные бонусы за регистрацию")
+            )
+
         conn.commit()
+
+        # Перечитываем гостя с актуальным балансом
+        cur.execute(
+            f"SELECT id, phone, name, birth_date, email, notifications, bonuses, total_spent, visits, level, created_at FROM {SCHEMA}.guests WHERE id = %s",
+            (guest_id,)
+        )
+        row = cur.fetchone()
         cur.close()
         conn.close()
         return {"statusCode": 200, "headers": cors, "body": json.dumps({"guest": _row_to_guest(row)}, ensure_ascii=False)}
+
+    # ── BIRTHDAY BONUS ──────────────────────────────────────────────
+    if method == "POST" and action == "birthday_bonus":
+        if not token:
+            return {"statusCode": 401, "headers": cors, "body": json.dumps({"error": "Не авторизован"})}
+        conn = get_conn()
+        cur = conn.cursor()
+
+        cur.execute(
+            f"""SELECT g.id, g.birth_date, g.bonuses
+                FROM {SCHEMA}.sessions s JOIN {SCHEMA}.guests g ON g.id = s.guest_id
+                WHERE s.token = %s AND s.expires_at > NOW()""",
+            (token,)
+        )
+        r = cur.fetchone()
+        if not r:
+            cur.close()
+            conn.close()
+            return {"statusCode": 401, "headers": cors, "body": json.dumps({"error": "Сессия истекла"})}
+
+        guest_id, birth_date, current_bonuses = r[0], r[1], r[2]
+
+        if not birth_date:
+            cur.close()
+            conn.close()
+            return {"statusCode": 400, "headers": cors, "body": json.dumps({"error": "Дата рождения не указана"})}
+
+        today = date.today()
+        is_birthday = (birth_date.month == today.month and birth_date.day == today.day)
+        if not is_birthday:
+            cur.close()
+            conn.close()
+            return {"statusCode": 400, "headers": cors, "body": json.dumps({"error": "Сегодня не день рождения"})}
+
+        # Проверяем, не начисляли ли уже в этом году
+        cur.execute(
+            f"""SELECT id FROM {SCHEMA}.bonus_transactions
+                WHERE guest_id = %s AND type = 'earn' AND description = 'Бонусы на день рождения'
+                AND created_at >= date_trunc('year', NOW())""",
+            (guest_id,)
+        )
+        already_given = cur.fetchone()
+        if already_given:
+            cur.close()
+            conn.close()
+            return {"statusCode": 400, "headers": cors, "body": json.dumps({"error": "Бонусы на день рождения уже начислены в этом году"})}
+
+        cur.execute(
+            f"UPDATE {SCHEMA}.guests SET bonuses = bonuses + %s WHERE id = %s",
+            (BONUS_BIRTHDAY, guest_id)
+        )
+        cur.execute(
+            f"INSERT INTO {SCHEMA}.bonus_transactions (guest_id, type, amount, description) VALUES (%s, 'earn', %s, %s)",
+            (guest_id, BONUS_BIRTHDAY, "Бонусы на день рождения")
+        )
+        conn.commit()
+
+        cur.execute(
+            f"SELECT id, phone, name, birth_date, email, notifications, bonuses, total_spent, visits, level, created_at FROM {SCHEMA}.guests WHERE id = %s",
+            (guest_id,)
+        )
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        return {"statusCode": 200, "headers": cors, "body": json.dumps({"guest": _row_to_guest(row), "bonus_given": BONUS_BIRTHDAY}, ensure_ascii=False)}
 
     # ── LOGOUT ──────────────────────────────────────────────────────
     if method == "POST" and action == "logout":
