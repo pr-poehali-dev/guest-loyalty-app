@@ -918,7 +918,6 @@ function ContactsSection({ guest }: { guest: Guest | null }) {
       ) : (
         <div className="card-warm rounded-2xl p-8 text-center text-muted-foreground text-sm">Контакты не заполнены</div>
       )}
-      <ContactForm guest={guest} />
     </div>
   );
 }
