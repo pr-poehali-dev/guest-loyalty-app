@@ -917,7 +917,7 @@ function ContactsSection() {
       ) : (
         <div className="card-warm rounded-2xl p-8 text-center text-muted-foreground text-sm">Контакты не заполнены</div>
       )}
-      <ContactForm />
+      <ContactForm email={contacts.contact_email} />
     </div>
   );
 }
@@ -925,61 +925,40 @@ function ContactsSection() {
 /* ══════════════════════════════════════════════════════════════════
    CONTACT FORM
 ══════════════════════════════════════════════════════════════════ */
-function ContactForm() {
+function ContactForm({ email }: { email?: string }) {
   const [name,    setName]    = useState("");
   const [message, setMessage] = useState("");
-  const [sending, setSending] = useState(false);
-  const [status,  setStatus]  = useState<"idle"|"ok"|"err">("idle");
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const toEmail = email || "dvgolovashenko@mail.ru";
+
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim()) return;
-    setSending(true); setStatus("idle");
-    try {
-      const res = await fetch(ADMIN_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "contact_message", name: name.trim(), message: message.trim() }),
-      });
-      const raw  = await res.json();
-      const data = typeof raw === "string" ? JSON.parse(raw) : raw;
-      if (data.ok) { setStatus("ok"); setName(""); setMessage(""); }
-      else setStatus("err");
-    } catch { setStatus("err"); }
-    finally { setSending(false); }
+    const subject = encodeURIComponent("Сообщение с сайта программы лояльности" + (name.trim() ? ` от ${name.trim()}` : ""));
+    const body    = encodeURIComponent(message.trim());
+    window.open(`mailto:${toEmail}?subject=${subject}&body=${body}`, "_blank");
   };
 
   return (
     <div className="card-warm rounded-2xl p-5">
       <div className="font-display text-lg font-semibold mb-3">Написать нам</div>
-      {status === "ok" ? (
-        <div className="py-6 text-center space-y-2 animate-fade-in">
-          <div className="text-3xl">✉️</div>
-          <div className="font-medium text-sm">Сообщение отправлено!</div>
-          <div className="text-xs text-muted-foreground">Мы ответим вам в ближайшее время</div>
-          <button onClick={() => setStatus("idle")} className="text-accent text-xs font-medium mt-2">Отправить ещё</button>
-        </div>
-      ) : (
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <input
-            type="text" value={name} onChange={e => setName(e.target.value)}
-            placeholder="Ваше имя"
-            className="w-full border border-input rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ring"
-          />
-          <textarea
-            value={message} onChange={e => setMessage(e.target.value)}
-            placeholder="Ваше сообщение" rows={3} required
-            className="w-full border border-input rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-          />
-          {status === "err" && (
-            <div className="text-rose-500 text-xs text-center">Ошибка отправки, попробуйте ещё раз</div>
-          )}
-          <button type="submit" disabled={sending || !message.trim()}
-            className="w-full wood-texture text-white rounded-xl py-3.5 font-semibold text-sm transition-opacity hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2">
-            {sending ? <><Icon name="Loader2" size={16} className="animate-spin" /> Отправляю…</> : "Отправить сообщение"}
-          </button>
-        </form>
-      )}
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <input
+          type="text" value={name} onChange={e => setName(e.target.value)}
+          placeholder="Ваше имя"
+          className="w-full border border-input rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ring"
+        />
+        <textarea
+          value={message} onChange={e => setMessage(e.target.value)}
+          placeholder="Ваше сообщение" rows={3} required
+          className="w-full border border-input rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+        />
+        <div className="text-xs text-muted-foreground">Откроется ваш почтовый клиент с готовым письмом на {toEmail}</div>
+        <button type="submit" disabled={!message.trim()}
+          className="w-full wood-texture text-white rounded-xl py-3.5 font-semibold text-sm transition-opacity hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2">
+          <Icon name="Mail" size={16} /> Написать письмо
+        </button>
+      </form>
     </div>
   );
 }
