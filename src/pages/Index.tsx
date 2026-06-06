@@ -3,9 +3,10 @@ import Icon from "@/components/ui/icon";
 
 type Section = "home" | "profile" | "earn" | "spend" | "history" | "levels" | "about" | "contacts";
 
-const AUTH_URL  = "https://functions.poehali.dev/971033a9-bdd6-4ca4-ab0f-633f8266c75c";
-const OPS_URL   = "https://functions.poehali.dev/fabd8921-1cce-4538-a097-120f5859948f";
-const ADMIN_URL = "https://functions.poehali.dev/ed5b87b9-be69-467e-8657-3ee303c934a8";
+const AUTH_URL    = "https://functions.poehali.dev/971033a9-bdd6-4ca4-ab0f-633f8266c75c";
+const OPS_URL     = "https://functions.poehali.dev/fabd8921-1cce-4538-a097-120f5859948f";
+const ADMIN_URL   = "https://functions.poehali.dev/ed5b87b9-be69-467e-8657-3ee303c934a8";
+const CONTACT_URL = "https://functions.poehali.dev/8348fec3-8e4f-4cc9-9321-a23f7ef9e605";
 
 const LOGO_URL  = "https://cdn.poehali.dev/projects/1c0a4e35-bc68-4a24-b157-6e54c5e66aa3/bucket/eca21a63-97af-4be7-b4c5-0dbea45a48ae.jpg";
 const HOUSE_URL = "https://cdn.poehali.dev/projects/1c0a4e35-bc68-4a24-b157-6e54c5e66aa3/bucket/d8034e69-c810-4a69-b63f-17e5edcf7adc.jpg";
@@ -178,7 +179,7 @@ export default function Index() {
         {section === "history"  && <HistorySection ops={ops} />}
         {section === "levels"   && <LevelsSection  guest={guest} />}
         {section === "about"    && <AboutSection />}
-        {section === "contacts" && <ContactsSection />}
+        {section === "contacts" && <ContactsSection guest={guest} />}
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-border z-40">
@@ -843,7 +844,7 @@ function AboutSection() {
 /* ══════════════════════════════════════════════════════════════════
    CONTACTS
 ══════════════════════════════════════════════════════════════════ */
-function ContactsSection() {
+function ContactsSection({ guest }: { guest: Guest | null }) {
   const [contacts, setContacts] = useState({
     contact_phone:    "",
     contact_whatsapp: "",
@@ -917,7 +918,7 @@ function ContactsSection() {
       ) : (
         <div className="card-warm rounded-2xl p-8 text-center text-muted-foreground text-sm">Контакты не заполнены</div>
       )}
-      <ContactForm email={contacts.contact_email} />
+      <ContactForm guest={guest} />
     </div>
   );
 }
@@ -925,40 +926,59 @@ function ContactsSection() {
 /* ══════════════════════════════════════════════════════════════════
    CONTACT FORM
 ══════════════════════════════════════════════════════════════════ */
-function ContactForm({ email }: { email?: string }) {
-  const [name,    setName]    = useState("");
+function ContactForm({ guest }: { guest?: Guest | null }) {
+  const [name,    setName]    = useState(guest?.name || "");
   const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const [status,  setStatus]  = useState<"idle"|"ok"|"err">("idle");
 
-  const toEmail = email || "dvgolovashenko@mail.ru";
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!message.trim()) return;
-    const subject = encodeURIComponent("Сообщение с сайта программы лояльности" + (name.trim() ? ` от ${name.trim()}` : ""));
-    const body    = encodeURIComponent(message.trim());
-    window.open(`mailto:${toEmail}?subject=${subject}&body=${body}`, "_blank");
+    setSending(true); setStatus("idle");
+    try {
+      const res  = await fetch(CONTACT_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: name.trim(), message: message.trim(), phone: guest?.phone || "" }),
+      });
+      const raw  = await res.json();
+      const data = typeof raw === "string" ? JSON.parse(raw) : raw;
+      if (data.ok) { setStatus("ok"); setMessage(""); }
+      else setStatus("err");
+    } catch { setStatus("err"); }
+    finally { setSending(false); }
   };
 
   return (
     <div className="card-warm rounded-2xl p-5">
       <div className="font-display text-lg font-semibold mb-3">Написать нам</div>
-      <form onSubmit={handleSubmit} className="space-y-3">
-        <input
-          type="text" value={name} onChange={e => setName(e.target.value)}
-          placeholder="Ваше имя"
-          className="w-full border border-input rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ring"
-        />
-        <textarea
-          value={message} onChange={e => setMessage(e.target.value)}
-          placeholder="Ваше сообщение" rows={3} required
-          className="w-full border border-input rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-        />
-        <div className="text-xs text-muted-foreground">Откроется ваш почтовый клиент с готовым письмом на {toEmail}</div>
-        <button type="submit" disabled={!message.trim()}
-          className="w-full wood-texture text-white rounded-xl py-3.5 font-semibold text-sm transition-opacity hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2">
-          <Icon name="Mail" size={16} /> Написать письмо
-        </button>
-      </form>
+      {status === "ok" ? (
+        <div className="py-6 text-center space-y-2 animate-fade-in">
+          <div className="text-3xl">✉️</div>
+          <div className="font-medium text-sm">Сообщение отправлено!</div>
+          <div className="text-xs text-muted-foreground">Мы ответим вам в ближайшее время</div>
+          <button onClick={() => setStatus("idle")} className="text-accent text-xs font-medium mt-2">Отправить ещё</button>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <input
+            type="text" value={name} onChange={e => setName(e.target.value)}
+            placeholder="Ваше имя"
+            className="w-full border border-input rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ring"
+          />
+          <textarea
+            value={message} onChange={e => setMessage(e.target.value)}
+            placeholder="Ваше сообщение" rows={3} required
+            className="w-full border border-input rounded-xl px-4 py-3 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+          />
+          {status === "err" && <div className="text-rose-500 text-xs text-center">Ошибка отправки, попробуйте ещё раз</div>}
+          <button type="submit" disabled={sending || !message.trim()}
+            className="w-full wood-texture text-white rounded-xl py-3.5 font-semibold text-sm transition-opacity hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2">
+            {sending ? <><Icon name="Loader2" size={16} className="animate-spin" /> Отправляю…</> : <><Icon name="Mail" size={16} /> Отправить сообщение</>}
+          </button>
+        </form>
+      )}
     </div>
   );
 }
