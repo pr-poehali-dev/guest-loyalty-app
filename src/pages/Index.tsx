@@ -671,7 +671,7 @@ function SpendSection({ guest }: { guest: Guest }) {
       </div>
       <div className="space-y-3">
         <div className="font-display text-lg font-semibold">Условия списания</div>
-        {["Бонусами можно оплатить до 50% стоимости бронирования","Минимальная сумма списания — 500 баллов","1 бонус = 1 рубль","Списание происходит в момент подтверждения брони"].map((t, i) => (
+        {["Списание бонусов доступно только при прямом бронировании на нашем сайте freedomvilage.ru","Бонусами можно оплатить до 50% стоимости бронирования","Минимальная сумма списания — 500 баллов","1 бонус = 1 рубль","Списание происходит в момент подтверждения брони"].map((t, i) => (
           <div key={i} className="flex gap-3 items-start">
             <span className="text-base">📌</span>
             <span className="text-sm text-muted-foreground">{t}</span>
