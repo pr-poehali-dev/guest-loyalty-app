@@ -13,6 +13,7 @@ interface Guest {
   level: string; notifications: boolean; created_at: string;
 }
 interface Stats { total_guests: number; total_bonuses: number; total_earn_ops: number; }
+interface HistoryItem { id: number; type: "earn" | "spend"; amount: number; description: string; created_at: string; }
 
 /* ══════════════════════════════════════════════════════════════════ */
 export default function Admin() {
@@ -253,6 +254,21 @@ function DetailView({ guest, apiFetch, onBack, onGuestUpdated }: {
   const [bonusLoading, setBonusLoading] = useState(false);
   const [bonusMsg,     setBonusMsg]     = useState("");
 
+  // История операций
+  const [history,        setHistory]        = useState<HistoryItem[]>([]);
+  const [historyLoading, setHistoryLoading]  = useState(true);
+
+  const loadHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const data = await apiFetch({ method: "GET" }, `type=history&guest_id=${g.id}`) as { history?: HistoryItem[] };
+      setHistory(data.history || []);
+    } catch { /* игнорируем */ }
+    finally { setHistoryLoading(false); }
+  }, [apiFetch, g.id]);
+
+  useEffect(() => { loadHistory(); }, [loadHistory]);
+
   // Форма редактирования
   const [editing,      setEditing]      = useState(false);
   const [editForm,     setEditForm]     = useState({ name: g.name || "", email: g.email || "", birth_date: g.birth_date || "", total_spent: String(g.total_spent), visits: String(g.visits), level: g.level });
@@ -274,6 +290,7 @@ function DetailView({ guest, apiFetch, onBack, onGuestUpdated }: {
         setG(updated); onGuestUpdated(updated);
         setBonusMsg(bonusAction === "earn" ? `✓ Начислено ${amount} бонусов` : `✓ Списано ${amount} бонусов`);
         setBonusAmount(""); setBonusDesc("");
+        loadHistory();
       } else {
         setBonusMsg("✗ " + (data.error || "Ошибка"));
       }
@@ -387,6 +404,35 @@ function DetailView({ guest, apiFetch, onBack, onGuestUpdated }: {
               : bonusAction === "earn" ? `Начислить бонусы` : `Списать бонусы`}
           </button>
         </form>
+      </div>
+
+      {/* Bonus history */}
+      <div className="bg-white rounded-2xl shadow-sm p-5">
+        <div className="font-display text-lg font-semibold mb-4">История начислений и списаний</div>
+        {historyLoading ? (
+          <div className="text-center py-6 text-muted-foreground text-sm flex items-center justify-center gap-2">
+            <Icon name="Loader2" size={16} className="animate-spin" /> Загрузка…
+          </div>
+        ) : history.length === 0 ? (
+          <div className="text-center py-6 text-muted-foreground text-sm">Операций пока нет</div>
+        ) : (
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {history.map(h => (
+              <div key={h.id} className="flex items-center gap-3 py-2.5 border-b border-border last:border-0">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${h.type === "earn" ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}`}>
+                  <Icon name={h.type === "earn" ? "Plus" : "Minus"} size={16} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{h.description || (h.type === "earn" ? "Начисление" : "Списание")}</div>
+                  <div className="text-xs text-muted-foreground">{h.created_at}</div>
+                </div>
+                <div className={`text-sm font-semibold flex-shrink-0 ${h.type === "earn" ? "text-emerald-600" : "text-rose-600"}`}>
+                  {h.type === "earn" ? "+" : "−"}{h.amount.toLocaleString()}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Edit guest data */}

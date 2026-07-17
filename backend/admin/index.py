@@ -108,6 +108,30 @@ def handler(event: dict, context) -> dict:
             cur.close(); conn.close()
             return ok({"settings": settings})
 
+        # История начислений/списаний бонусов конкретного гостя
+        if qs.get("type") == "history":
+            guest_id = qs.get("guest_id")
+            if not guest_id:
+                cur.close(); conn.close()
+                return err("Укажите гостя")
+            cur.execute(
+                f"""SELECT id, type, amount, description, created_at
+                    FROM {SCHEMA}.bonus_transactions
+                    WHERE guest_id = %s
+                    ORDER BY created_at DESC
+                    LIMIT 200""",
+                (guest_id,)
+            )
+            history = [{
+                "id": r[0],
+                "type": r[1],
+                "amount": r[2],
+                "description": r[3] or "",
+                "created_at": r[4].strftime("%d.%m.%Y %H:%M") if r[4] else "",
+            } for r in cur.fetchall()]
+            cur.close(); conn.close()
+            return ok({"history": history})
+
         if search:
             cur.execute(
                 f"""SELECT id, phone, name, birth_date, email, bonuses, total_spent, visits, level,
