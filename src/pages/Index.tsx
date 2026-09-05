@@ -204,6 +204,24 @@ function LoginScreen({ onLogin }: { onLogin: (p: string) => Promise<unknown> }) 
   const [phone,   setPhone]   = useState("");
   const [loading, setLoading] = useState(false);
   const [error,   setError]   = useState("");
+  const [consent, setConsent] = useState(false);
+  const [policyUrl, setPolicyUrl] = useState("");
+  const [cookieNoticeVisible, setCookieNoticeVisible] = useState(() => !localStorage.getItem("fv_cookie_accepted"));
+
+  useEffect(() => {
+    fetch(`${ADMIN_URL}?type=public_settings`)
+      .then(r => r.json())
+      .then(raw => {
+        const data = typeof raw === "string" ? JSON.parse(raw) : raw;
+        if (data.settings?.privacy_policy_url) setPolicyUrl(data.settings.privacy_policy_url);
+      })
+      .catch(() => {});
+  }, []);
+
+  const acceptCookies = () => {
+    localStorage.setItem("fv_cookie_accepted", "1");
+    setCookieNoticeVisible(false);
+  };
 
   const fmt = (val: string) => {
     const d = val.replace(/\D/g, "");
@@ -221,6 +239,7 @@ function LoginScreen({ onLogin }: { onLogin: (p: string) => Promise<unknown> }) 
     e.preventDefault();
     const digits = phone.replace(/\D/g, "");
     if (digits.length < 11) { setError("Введите полный номер телефона"); return; }
+    if (!consent) { setError("Необходимо согласие на обработку персональных данных"); return; }
     setLoading(true); setError("");
     try {
       const normalized = "+" + (digits.startsWith("8") ? "7" + digits.slice(1) : digits);
@@ -258,9 +277,21 @@ function LoginScreen({ onLogin }: { onLogin: (p: string) => Promise<unknown> }) 
                 placeholder="+7 (___) ___-__-__"
                 className="w-full border border-input rounded-xl px-4 py-3.5 text-base bg-white focus:outline-none focus:ring-2 focus:ring-ring font-body"
                 autoComplete="tel" />
-              {error && <div className="text-rose-500 text-xs mt-1.5">{error}</div>}
             </div>
-            <button type="submit" disabled={loading}
+            <label className="flex items-start gap-2.5 cursor-pointer select-none">
+              <input type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-input accent-accent flex-shrink-0" />
+              <span className="text-xs text-muted-foreground leading-snug">
+                Я согласен(а) на{" "}
+                {policyUrl ? (
+                  <a href={policyUrl} target="_blank" rel="noopener noreferrer" className="text-accent underline underline-offset-2">
+                    обработку персональных данных
+                  </a>
+                ) : "обработку персональных данных"}
+              </span>
+            </label>
+            {error && <div className="text-rose-500 text-xs -mt-2">{error}</div>}
+            <button type="submit" disabled={loading || !consent}
               className="w-full wood-texture text-white rounded-xl py-3.5 font-semibold text-sm transition-opacity hover:opacity-90 disabled:opacity-60 flex items-center justify-center gap-2">
               {loading
                 ? <><Icon name="Loader2" size={16} className="animate-spin" /> Входим…</>
@@ -282,6 +313,25 @@ function LoginScreen({ onLogin }: { onLogin: (p: string) => Promise<unknown> }) 
           ))}
         </div>
       </div>
+
+      {cookieNoticeVisible && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-[hsl(210,15%,22%)] text-white px-5 py-4 shadow-lg animate-fade-in">
+          <div className="max-w-md mx-auto flex items-center gap-4">
+            <div className="text-xs text-white/80 flex-1 leading-snug">
+              Мы используем файлы cookie для корректной работы сайта.{" "}
+              {policyUrl && (
+                <a href={policyUrl} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">
+                  Подробнее
+                </a>
+              )}
+            </div>
+            <button onClick={acceptCookies}
+              className="wood-texture text-white text-xs font-semibold rounded-lg px-4 py-2 whitespace-nowrap flex-shrink-0">
+              Хорошо
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,11 +1,23 @@
+import base64
 import json
 import os
+import uuid
 import psycopg2
 import urllib.request
 import urllib.parse
+import boto3
 
 SCHEMA = "t_p70437429_guest_loyalty_app"
 TELEGRAM_CHAT_ID = "6893050478"
+
+
+def get_s3():
+    return boto3.client(
+        "s3",
+        endpoint_url="https://bucket.poehali.dev",
+        aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
+        aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
+    )
 
 
 def get_conn():
@@ -37,6 +49,7 @@ def check_auth(event: dict) -> bool:
 
 
 CONTACT_KEYS = ["contact_phone", "contact_whatsapp", "contact_email", "contact_address", "contact_hours", "contact_website"]
+SETTINGS_KEYS = CONTACT_KEYS + ["privacy_policy_url"]
 
 
 def handler(event: dict, context) -> dict:
@@ -81,7 +94,7 @@ def handler(event: dict, context) -> dict:
         qs_pre = event.get("queryStringParameters") or {}
         if qs_pre.get("type") == "public_settings":
             conn_p = get_conn(); cur_p = conn_p.cursor()
-            cur_p.execute(f"SELECT key, value FROM {SCHEMA}.settings WHERE key = ANY(%s)", (CONTACT_KEYS,))
+            cur_p.execute(f"SELECT key, value FROM {SCHEMA}.settings WHERE key = ANY(%s)", (SETTINGS_KEYS,))
             settings = {r[0]: r[1] for r in cur_p.fetchall()}
             cur_p.close(); conn_p.close()
             return ok({"settings": settings})
@@ -103,7 +116,7 @@ def handler(event: dict, context) -> dict:
 
         # Запрос настроек для админа
         if qs.get("type") == "settings":
-            cur.execute(f"SELECT key, value FROM {SCHEMA}.settings WHERE key = ANY(%s)", (CONTACT_KEYS,))
+            cur.execute(f"SELECT key, value FROM {SCHEMA}.settings WHERE key = ANY(%s)", (SETTINGS_KEYS,))
             settings = {r[0]: r[1] for r in cur.fetchall()}
             cur.close(); conn.close()
             return ok({"settings": settings})
@@ -269,6 +282,37 @@ def handler(event: dict, context) -> dict:
             conn.commit()
             cur.close(); conn.close()
             return ok({"ok": True})
+
+        # Загрузить файл политики обработки персональных данных
+        if action == "upload_policy":
+            file_b64  = body.get("file_base64") or ""
+            file_name = (body.get("file_name") or "policy.pdf").strip()
+            content_type = body.get("content_type") or "application/pdf"
+
+            if not file_b64:
+                cur.close(); conn.close()
+                return err("Файл не передан")
+
+            ext = file_name.rsplit(".", 1)[-1] if "." in file_name else "pdf"
+            key = f"policy/{uuid.uuid4().hex}.{ext}"
+
+            try:
+                file_bytes = base64.b64decode(file_b64)
+                s3 = get_s3()
+                s3.put_object(Bucket="files", Key=key, Body=file_bytes, ContentType=content_type)
+            except Exception as e:
+                cur.close(); conn.close()
+                return err(f"Ошибка загрузки файла: {e}")
+
+            cdn_url = f"https://cdn.poehali.dev/projects/{os.environ['AWS_ACCESS_KEY_ID']}/bucket/{key}"
+
+            cur.execute(
+                f"INSERT INTO {SCHEMA}.settings (key, value, updated_at) VALUES ('privacy_policy_url', %s, NOW()) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()",
+                (cdn_url,)
+            )
+            conn.commit()
+            cur.close(); conn.close()
+            return ok({"ok": True, "url": cdn_url})
 
         cur.close(); conn.close()
         return err("Неизвестное действие")
