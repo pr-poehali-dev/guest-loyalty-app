@@ -96,6 +96,10 @@ def handler(event: dict, context) -> dict:
             conn_p = get_conn(); cur_p = conn_p.cursor()
             cur_p.execute(f"SELECT key, value FROM {SCHEMA}.settings WHERE key = ANY(%s)", (SETTINGS_KEYS,))
             settings = {r[0]: r[1] for r in cur_p.fetchall()}
+            cur_p.execute(f"SELECT url FROM {SCHEMA}.documents WHERE is_privacy_policy = TRUE ORDER BY created_at DESC LIMIT 1")
+            policy_row = cur_p.fetchone()
+            if policy_row:
+                settings["privacy_policy_url"] = policy_row[0]
             cur_p.close(); conn_p.close()
             return ok({"settings": settings})
 
@@ -120,6 +124,21 @@ def handler(event: dict, context) -> dict:
             settings = {r[0]: r[1] for r in cur.fetchall()}
             cur.close(); conn.close()
             return ok({"settings": settings})
+
+        # Список загруженных документов
+        if qs.get("type") == "documents":
+            cur.execute(
+                f"""SELECT id, title, file_name, url, is_privacy_policy, created_at
+                    FROM {SCHEMA}.documents
+                    ORDER BY created_at DESC"""
+            )
+            documents = [{
+                "id": r[0], "title": r[1], "file_name": r[2], "url": r[3],
+                "is_privacy_policy": bool(r[4]),
+                "created_at": r[5].strftime("%d.%m.%Y %H:%M") if r[5] else "",
+            } for r in cur.fetchall()]
+            cur.close(); conn.close()
+            return ok({"documents": documents})
 
         # История начислений/списаний бонусов конкретного гостя
         if qs.get("type") == "history":
@@ -283,18 +302,23 @@ def handler(event: dict, context) -> dict:
             cur.close(); conn.close()
             return ok({"ok": True})
 
-        # Загрузить файл политики обработки персональных данных
-        if action == "upload_policy":
+        # Загрузить документ (политика, оферта, реклама и т.д.)
+        if action == "upload_document":
             file_b64  = body.get("file_base64") or ""
-            file_name = (body.get("file_name") or "policy.pdf").strip()
+            file_name = (body.get("file_name") or "document.pdf").strip()
             content_type = body.get("content_type") or "application/pdf"
+            title = (body.get("title") or file_name).strip()
+            is_privacy_policy = bool(body.get("is_privacy_policy"))
 
             if not file_b64:
                 cur.close(); conn.close()
                 return err("Файл не передан")
+            if not title:
+                cur.close(); conn.close()
+                return err("Укажите название документа")
 
             ext = file_name.rsplit(".", 1)[-1] if "." in file_name else "pdf"
-            key = f"policy/{uuid.uuid4().hex}.{ext}"
+            key = f"documents/{uuid.uuid4().hex}.{ext}"
 
             try:
                 file_bytes = base64.b64decode(file_b64)
@@ -306,13 +330,33 @@ def handler(event: dict, context) -> dict:
 
             cdn_url = f"https://cdn.poehali.dev/projects/{os.environ['AWS_ACCESS_KEY_ID']}/bucket/{key}"
 
+            if is_privacy_policy:
+                cur.execute(f"UPDATE {SCHEMA}.documents SET is_privacy_policy = FALSE WHERE is_privacy_policy = TRUE")
+
             cur.execute(
-                f"INSERT INTO {SCHEMA}.settings (key, value, updated_at) VALUES ('privacy_policy_url', %s, NOW()) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()",
-                (cdn_url,)
+                f"""INSERT INTO {SCHEMA}.documents (title, file_name, url, is_privacy_policy)
+                    VALUES (%s, %s, %s, %s) RETURNING id, created_at""",
+                (title, file_name, cdn_url, is_privacy_policy)
             )
+            new_id, created_at = cur.fetchone()
             conn.commit()
             cur.close(); conn.close()
-            return ok({"ok": True, "url": cdn_url})
+            return ok({"ok": True, "document": {
+                "id": new_id, "title": title, "file_name": file_name, "url": cdn_url,
+                "is_privacy_policy": is_privacy_policy,
+                "created_at": created_at.strftime("%d.%m.%Y %H:%M") if created_at else "",
+            }})
+
+        # Удалить документ
+        if action == "delete_document":
+            doc_id = body.get("document_id")
+            if not doc_id:
+                cur.close(); conn.close()
+                return err("Укажите документ")
+            cur.execute(f"DELETE FROM {SCHEMA}.documents WHERE id = %s", (doc_id,))
+            conn.commit()
+            cur.close(); conn.close()
+            return ok({"ok": True})
 
         cur.close(); conn.close()
         return err("Неизвестное действие")

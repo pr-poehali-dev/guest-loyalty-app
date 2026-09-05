@@ -514,7 +514,10 @@ interface ContactSettings {
   contact_address: string;
   contact_hours: string;
   contact_website: string;
-  privacy_policy_url?: string;
+}
+interface DocumentItem {
+  id: number; title: string; file_name: string; url: string;
+  is_privacy_policy: boolean; created_at: string;
 }
 
 function ContactsView({ apiFetch }: { apiFetch: (opts: RequestInit, qs?: string) => Promise<unknown> }) {
@@ -525,16 +528,28 @@ function ContactsView({ apiFetch }: { apiFetch: (opts: RequestInit, qs?: string)
     contact_address:  "",
     contact_hours:    "",
     contact_website:  "",
-    privacy_policy_url: "",
   });
   const [loading,  setLoading]  = useState(true);
   const [saving,   setSaving]   = useState(false);
   const [msg,      setMsg]      = useState("");
 
-  // Загрузка файла политики
-  const [policyFile,    setPolicyFile]    = useState<File | null>(null);
-  const [policyUploading, setPolicyUploading] = useState(false);
-  const [policyMsg,     setPolicyMsg]     = useState("");
+  // Документы
+  const [documents,        setDocuments]        = useState<DocumentItem[]>([]);
+  const [docsLoading,      setDocsLoading]      = useState(true);
+  const [docTitle,         setDocTitle]         = useState("");
+  const [docFile,          setDocFile]          = useState<File | null>(null);
+  const [docIsPolicy,      setDocIsPolicy]      = useState(false);
+  const [docUploading,     setDocUploading]     = useState(false);
+  const [docMsg,           setDocMsg]           = useState("");
+
+  const loadDocuments = useCallback(async () => {
+    setDocsLoading(true);
+    try {
+      const data = await apiFetch({ method: "GET" }, "type=documents") as { documents?: DocumentItem[] };
+      setDocuments(data.documents || []);
+    } catch { /* игнорируем */ }
+    finally { setDocsLoading(false); }
+  }, [apiFetch]);
 
   useEffect(() => {
     apiFetch({ method: "GET" }, "type=settings")
@@ -543,6 +558,7 @@ function ContactsView({ apiFetch }: { apiFetch: (opts: RequestInit, qs?: string)
         if (d.settings) setForm(f => ({ ...f, ...d.settings }));
       })
       .finally(() => setLoading(false));
+    loadDocuments();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -559,34 +575,43 @@ function ContactsView({ apiFetch }: { apiFetch: (opts: RequestInit, qs?: string)
     finally { setSaving(false); setTimeout(() => setMsg(""), 3000); }
   };
 
-  const handlePolicyUpload = async () => {
-    if (!policyFile) return;
-    setPolicyUploading(true); setPolicyMsg("");
+  const handleDocUpload = async () => {
+    if (!docFile || !docTitle.trim()) return;
+    setDocUploading(true); setDocMsg("");
     try {
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve((reader.result as string).split(",")[1] || "");
         reader.onerror = reject;
-        reader.readAsDataURL(policyFile);
+        reader.readAsDataURL(docFile);
       });
       const data = await apiFetch({
         method: "POST",
         body: JSON.stringify({
-          action: "upload_policy",
+          action: "upload_document",
+          title: docTitle.trim(),
           file_base64: base64,
-          file_name: policyFile.name,
-          content_type: policyFile.type || "application/pdf",
+          file_name: docFile.name,
+          content_type: docFile.type || "application/pdf",
+          is_privacy_policy: docIsPolicy,
         }),
-      }) as { ok?: boolean; url?: string; error?: string };
-      if (data.ok && data.url) {
-        setForm(f => ({ ...f, privacy_policy_url: data.url }));
-        setPolicyMsg("✓ Файл загружен");
-        setPolicyFile(null);
+      }) as { ok?: boolean; error?: string };
+      if (data.ok) {
+        setDocMsg("✓ Документ загружен");
+        setDocTitle(""); setDocFile(null); setDocIsPolicy(false);
+        loadDocuments();
       } else {
-        setPolicyMsg("✗ " + (data.error || "Ошибка загрузки"));
+        setDocMsg("✗ " + (data.error || "Ошибка загрузки"));
       }
-    } catch { setPolicyMsg("✗ Ошибка соединения"); }
-    finally { setPolicyUploading(false); setTimeout(() => setPolicyMsg(""), 4000); }
+    } catch { setDocMsg("✗ Ошибка соединения"); }
+    finally { setDocUploading(false); setTimeout(() => setDocMsg(""), 4000); }
+  };
+
+  const handleDocDelete = async (id: number) => {
+    try {
+      await apiFetch({ method: "POST", body: JSON.stringify({ action: "delete_document", document_id: id }) });
+      setDocuments(prev => prev.filter(d => d.id !== id));
+    } catch { /* игнорируем */ }
   };
 
   const fields: { key: keyof ContactSettings; label: string; icon: string; placeholder: string; type?: string }[] = [
@@ -641,35 +666,63 @@ function ContactsView({ apiFetch }: { apiFetch: (opts: RequestInit, qs?: string)
         </button>
       </form>
 
-      {/* Privacy policy document */}
+      {/* Documents */}
       <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
         <div>
-          <div className="font-display text-lg font-semibold">Политика обработки персональных данных</div>
-          <div className="text-muted-foreground text-sm mt-1">Загрузите файл (PDF/DOC) — ссылка будет показана гостям на экране входа рядом с галочкой согласия</div>
+          <div className="font-display text-lg font-semibold">Документы</div>
+          <div className="text-muted-foreground text-sm mt-1">Загружайте политику обработки персональных данных, оферты и другие документы. Документ с пометкой «Политика» показывается гостям на экране входа рядом с галочкой согласия</div>
         </div>
 
-        {form.privacy_policy_url && (
-          <a href={form.privacy_policy_url} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-3 border border-border rounded-xl px-4 py-3 hover:bg-muted/40 transition-colors">
-            <Icon name="FileText" size={18} className="text-emerald-600 flex-shrink-0" />
-            <span className="text-sm truncate flex-1">Текущий документ загружен</span>
-            <Icon name="ExternalLink" size={15} className="text-muted-foreground flex-shrink-0" />
-          </a>
+        {docsLoading ? (
+          <div className="text-center py-4 text-muted-foreground text-sm flex items-center justify-center gap-2">
+            <Icon name="Loader2" size={16} className="animate-spin" /> Загрузка…
+          </div>
+        ) : documents.length > 0 && (
+          <div className="space-y-2">
+            {documents.map(doc => (
+              <div key={doc.id} className="flex items-center gap-3 border border-border rounded-xl px-4 py-3">
+                <Icon name="FileText" size={18} className="text-emerald-600 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <a href={doc.url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium truncate hover:underline block">
+                    {doc.title}
+                  </a>
+                  <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+                    {doc.is_privacy_policy && <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded-full text-[10px] font-medium">Политика</span>}
+                    {doc.created_at}
+                  </div>
+                </div>
+                <button type="button" onClick={() => handleDocDelete(doc.id)}
+                  className="text-muted-foreground hover:text-rose-500 transition-colors flex-shrink-0 p-1">
+                  <Icon name="Trash2" size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
         )}
 
-        <div className="flex gap-3">
-          <input type="file" accept=".pdf,.doc,.docx" onChange={e => setPolicyFile(e.target.files?.[0] || null)}
-            className="flex-1 border border-input rounded-xl px-3 py-2.5 text-sm bg-white file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-muted file:text-xs file:font-medium" />
-          <button type="button" onClick={handlePolicyUpload} disabled={!policyFile || policyUploading}
-            className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50 flex items-center gap-2 flex-shrink-0"
-            style={{ background: "hsl(32,45%,55%)" }}>
-            {policyUploading ? <><Icon name="Loader2" size={15} className="animate-spin" /> Загрузка…</> : "Загрузить"}
-          </button>
+        <div className="space-y-3 pt-2 border-t border-border">
+          <input type="text" value={docTitle} onChange={e => setDocTitle(e.target.value)}
+            placeholder="Название документа, например: Политика обработки персональных данных"
+            className="w-full border border-input rounded-xl px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-ring" />
+          <div className="flex gap-3">
+            <input type="file" accept=".pdf,.doc,.docx" onChange={e => setDocFile(e.target.files?.[0] || null)}
+              className="flex-1 border border-input rounded-xl px-3 py-2.5 text-sm bg-white file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:bg-muted file:text-xs file:font-medium" />
+            <button type="button" onClick={handleDocUpload} disabled={!docFile || !docTitle.trim() || docUploading}
+              className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50 flex items-center gap-2 flex-shrink-0"
+              style={{ background: "hsl(32,45%,55%)" }}>
+              {docUploading ? <><Icon name="Loader2" size={15} className="animate-spin" /> Загрузка…</> : "Загрузить"}
+            </button>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer select-none">
+            <input type="checkbox" checked={docIsPolicy} onChange={e => setDocIsPolicy(e.target.checked)}
+              className="w-4 h-4 rounded border-input accent-accent" />
+            <span className="text-xs text-muted-foreground">Это политика обработки персональных данных (показывать на экране входа)</span>
+          </label>
         </div>
 
-        {policyMsg && (
-          <div className={`text-sm text-center py-2 rounded-lg ${policyMsg.startsWith("✓") ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
-            {policyMsg}
+        {docMsg && (
+          <div className={`text-sm text-center py-2 rounded-lg ${docMsg.startsWith("✓") ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+            {docMsg}
           </div>
         )}
       </div>
