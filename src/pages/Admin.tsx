@@ -5,7 +5,7 @@ const ADMIN_URL = "https://functions.poehali.dev/ed5b87b9-be69-467e-8657-3ee303c
 
 const LOGO_URL = "https://cdn.poehali.dev/projects/1c0a4e35-bc68-4a24-b157-6e54c5e66aa3/bucket/eca21a63-97af-4be7-b4c5-0dbea45a48ae.jpg";
 
-const LEVELS = ["Гость", "Серебряный", "Золотой", "Платиновый"];
+const LEVELS = ["Гость", "Серебряный", "Золотой", "Платиновый", "Бриллиант"];
 
 interface Guest {
   id: number; phone: string; name: string | null; birth_date: string | null;
@@ -166,7 +166,7 @@ function ListView({ guests, stats, search, loading, onSearch, onSelect, onRefres
   guests: Guest[]; stats: Stats | null; search: string; loading: boolean;
   onSearch: (q: string) => void; onSelect: (g: Guest) => void; onRefresh: () => void;
 }) {
-  const levelIcon: Record<string, string> = { "Гость": "🌿", "Серебряный": "🪨", "Золотой": "🌾", "Платиновый": "🦅" };
+  const levelIcon: Record<string, string> = { "Гость": "🌿", "Серебряный": "🪨", "Золотой": "🌾", "Платиновый": "🦅", "Бриллиант": "💎" };
 
   return (
     <div className="space-y-5">
@@ -323,7 +323,7 @@ function DetailView({ guest, apiFetch, onBack, onGuestUpdated }: {
     finally { setEditLoading(false); setTimeout(() => setEditMsg(""), 4000); }
   };
 
-  const levelIcon: Record<string, string> = { "Гость": "🌿", "Серебряный": "🪨", "Золотой": "🌾", "Платиновый": "🦅" };
+  const levelIcon: Record<string, string> = { "Гость": "🌿", "Серебряный": "🪨", "Золотой": "🌾", "Платиновый": "🦅", "Бриллиант": "💎" };
 
   return (
     <div className="space-y-5 max-w-2xl">
